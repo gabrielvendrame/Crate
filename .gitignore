@@ -1,0 +1,24 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Progetto generato da XcodeGen: si rigenera con `xcodegen generate`
+Crate.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+# Package.resolved viene committato di proposito: fissa la versione di GRDB, altrimenti una
+# risoluzione futura potrebbe tirare dentro una major diversa senza che nessuno se ne accorga.
+
+# Binari sidecar: scaricati con Scripts/fetch-tools.sh, non versionati
+Resources/Tools/yt-dlp/
+Resources/Tools/yt-dlp
+Resources/Tools/ffmpeg
+Resources/Tools/ffprobe
+
+# macOS
+.DS_Store

@@ -1,0 +1,55 @@
+name: Crate
+
+options:
+  bundleIdPrefix: com.gabrielvendrame
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+packages:
+  DJKit:
+    path: DJKit
+
+targets:
+  Crate:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+      # Riferimento alla cartella Tools, non a Resources: così il contenuto atterra in
+      # Contents/Resources/Tools/ e non in Contents/Resources/Resources/Tools/.
+      - path: Resources/Tools
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: DJKit
+        product: DJKit
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleName: Crate
+        CFBundleDisplayName: Crate
+        LSMinimumSystemVersion: "26.0"
+        LSApplicationCategoryType: public.app-category.music
+        NSHumanReadableCopyright: ""
+        # L'app è locale e non sandboxata: scrive in Application Support e lancia yt-dlp.
+        NSSupportsAutomaticTermination: false
+        NSSupportsSuddenTermination: false
+    settings:
+      base:
+        PRODUCT_NAME: Crate
+        PRODUCT_BUNDLE_IDENTIFIER: com.gabrielvendrame.crate
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        # Firma ad hoc: app locale, nessun team di sviluppo richiesto.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        COMBINE_HIDPI_IMAGES: YES
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
