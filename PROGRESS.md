@@ -172,8 +172,12 @@ verticale, crossfader, gain per deck e i due tasti di nudge, quindi **M4 è chiu
 possono suonare insieme e mettere in fase. Il BPM mostra `— BPM` perché l'analisi del tempo
 arriva in M6.
 
-Restano da provare all'orecchio: che il suono esca davvero dal device, che scrub e seek non
-producano schiocchi, e che l'anteprima del CUE tenuto premuto attacchi e stacchi pulita.
+L'editor delle scalette è completo e **provato pilotando l'app**: riordino trascinando, brani
+aggiunti lasciandoli sulla scaletta nella barra laterale, note scritte sul posto.
+
+**Il suono è stato sentito da Gabriel** («funziona»), quindi il motore è verificato all'orecchio e
+non solo in rendering offline. Restano da ascoltare con attenzione: che scrub e seek non producano
+schiocchi, e che l'anteprima del CUE tenuto premuto attacchi e stacchi pulita.
 
 ```bash
 cd /Users/gabriel/Desktop/youtube-playlist-creator-dj
@@ -217,7 +221,8 @@ percorso non cambia. Il bundle identifier è unico, quindi `open` da solo non ba
 vecchia è ancora in esecuzione, macOS porta in primo piano quella.
 
 ```bash
-osascript -e 'quit app "Crate"'; sleep 2; open ~/Library/Developer/Xcode/DerivedData/Crate-ccwemjglglgepydupulkiluzdkvq/Build/Products/Debug/Crate.app
+osascript -e 'quit app "Crate"'; osascript -e 'delay 2'
+open ~/Library/Developer/Xcode/DerivedData/Crate-ccwemjglglgepydupulkiluzdkvq/Build/Products/Debug/Crate.app
 ```
 
 **Traccia di prova** fornita da Gabriel: `https://www.youtube.com/watch?v=wqf-xIyf5y4` —
@@ -228,8 +233,9 @@ osascript -e 'quit app "Crate"'; sleep 2; open ~/Library/Developer/Xcode/Derived
 `.peaks`: in tabella appaiono come "Senza waveform". Si sistemano dal menu **Deck → Calcola le
 waveform mancanti**, oppure una alla volta con ⌥⌘R.
 
-**Il progetto è sotto git** (branch `main`), con un commit: *«Impianto dell'app e import da
-YouTube funzionante»*. Tutto ciò che riguarda M3 e M4 è ancora da committare.
+**Il progetto è sotto git** (branch `main`, nessun remote), con due commit: l'impianto con
+l'import da YouTube, e *«Waveform, deck audio con CUE e hot cue, editor delle scalette»* che
+chiude M3, M4 e M5. Albero di lavoro pulito.
 
 ## Prossimo passo — resto di M4
 
