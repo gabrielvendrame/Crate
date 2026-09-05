@@ -151,7 +151,10 @@ Legenda: `[ ] todo` · `[~] in-progress` · `[x] done` · `[!] bloccato`
 - [x] `done` — Scorciatoie complete: `DeckKeyMonitor` riscritto con `keyDown` **e** `keyUp` e tre
   fasi (pressione, tenuto, rilascio) — spazio, C per il CUE tenuto premuto, Z/X per nudge e
   spinta, D cambia deck, G apre la griglia, −/+ zoom. Pannello di aiuto in `KeyboardShortcuts`
-  (⌘/), che è anche la sola tabella da tenere allineata
+  (⌘/), che è anche la sola tabella da tenere allineata. **Provate pilotando l'app** con
+  `Scripts/ui-key.swift`: spazio fa partire e fermare, C in play riporta a 0:00.0, e C **tenuto
+  premuto** suona finché è giù e si ferma al rilascio — che è il comportamento per cui il monitor
+  esiste
 - [x] `done` — `Import/ToolsUpdater.swift` + `SettingsSheet` (⌘,): ultima release da GitHub,
   variante **onedir** come quella impacchettata, spacchettata con `ditto` e scambiata alla fine —
   un download interrotto non lascia un yt-dlp mezzo scritto. **Provato davvero**, su una libreria
@@ -264,11 +267,19 @@ nel repo, con l'uso scritto in testa a ognuno:
 swiftc -O Scripts/window-bounds.swift -o /tmp/window-bounds   # limiti della finestra
 swiftc -O Scripts/ui-ax-dump.swift    -o /tmp/ui-ax-dump      # albero AX con le coordinate
 swiftc -O Scripts/ui-mouse.swift      -o /tmp/ui-mouse        # click | doubleclick | drag
+swiftc -O Scripts/ui-type.swift       -o /tmp/ui-type         # digitare in un campo
+swiftc -O Scripts/ui-key.swift        -o /tmp/ui-key          # tasti per codice fisico, e tenuti
 osascript -e 'tell application "Crate" to activate'
 /tmp/ui-ax-dump $(pgrep -x Crate) AXRow 12                    # dove sono le righe
 /tmp/ui-mouse drag 648 204 648 122 30
 screencapture -x -R"$(/tmp/window-bounds Crate)" /tmp/crate.png
 ```
+
+**Per attivare la finestra usa `open -a` sul bundle**, non `activate` via osascript: su questa
+macchina altre app si riprendono il primo piano di continuo, e `open -a` la rialza in modo
+affidabile. E `keystroke` di System Events porta avanti un'altra app facendo perdere il fuoco:
+per scrivere serve `ui-type`, per le scorciatoie a tasto nudo `ui-key` — quelle si riconoscono dal
+**codice fisico**, e un evento con stringa unicode ha `keyCode` 0, quindi non scatterebbero.
 
 Le coordinate si prendono dall'albero AX, non misurando i pixel di uno screenshot — e per lo
 stesso motivo **quello che si vede in uno screenshot non è una verifica**: dove esiste una misura
