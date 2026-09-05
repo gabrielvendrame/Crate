@@ -228,8 +228,11 @@ osascript -e 'tell application "Crate" to activate'
 screencapture -x -R"$(/tmp/window-bounds Crate)" /tmp/crate.png
 ```
 
-Le coordinate si prendono dall'albero AX, non misurando i pixel di uno screenshot. `sleep` è
-bloccato: le attese si fanno con `osascript -e 'delay 2'`.
+Le coordinate si prendono dall'albero AX, non misurando i pixel di uno screenshot — e per lo
+stesso motivo **quello che si vede in uno screenshot non è una verifica**: dove esiste una misura
+numerica sui dati veri, è quella che decide. Le attese brevi dentro un comando funzionano
+(`sleep 2`), quelle lunghe usate per aspettare un lavoro no: si aspetta una condizione, per
+esempio `until [ "$(sqlite3 … )" = "0" ]; do sleep 5; done` in background.
 
 **Il toolchain Metal va installato a parte**, una tantum, altrimenti la compilazione di
 `Waveform.metal` fallisce con "cannot execute tool 'metal'":
