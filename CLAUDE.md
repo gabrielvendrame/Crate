@@ -201,6 +201,22 @@ Resources/Tools/     sidecar bundled, NON versionati: ./Scripts/fetch-tools.sh
 BPM sono la parte con più logica e più facile da sbagliare: nel package si testano con
 `swift test` in secondi, senza avviare la GUI.
 
+## L'icona
+
+Sta in `App/Assets.xcassets/AppIcon.appiconset` ed è **generata da codice**:
+
+```bash
+swift Scripts/make-app-icon.swift     # riscrive tutte e dieci le misure
+```
+
+I PNG sono versionati insieme allo script, quindi chi clona compila senza eseguire niente; lo
+script serve a **cambiarla**, non a ricostruirla. È il motivo per cui è fatta così: correggere un
+colore vuol dire toccare una riga e rilanciare, invece di riaprire un editor grafico e riesportare
+undici file a mano tenendoli allineati.
+
+Se dopo un cambio l'icona vecchia resta nel Dock o nel Finder è la cache delle icone di macOS, non
+la compilazione: `touch Crate.app && killall Dock`.
+
 ## Dati dell'utente su disco
 
 ```

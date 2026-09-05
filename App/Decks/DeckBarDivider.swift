@@ -12,6 +12,7 @@ struct DeckBarDivider: View {
     @Binding var height: Double
 
     @State private var dragAnchor: Double?
+    @State private var isHovering = false
 
     var body: some View {
         ZStack {
@@ -20,14 +21,17 @@ struct DeckBarDivider: View {
                 .frame(height: 1)
 
             Capsule()
-                .fill(.tertiary)
-                .frame(width: 40, height: 3)
+                .fill(isHovering ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .frame(width: 56, height: 4)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 9)
+        // Dodici punti, non nove: è una maniglia che si cerca col mouse, e tre punti in più sono
+        // la differenza fra prenderla al primo colpo e provarci due volte.
+        .frame(height: 12)
         .background(Color(nsColor: .underPageBackgroundColor))
         .contentShape(Rectangle())
         .onHover { inside in
+            isHovering = inside
             // Il cursore dice che si può trascinare, come su un divisore vero.
             if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
         }

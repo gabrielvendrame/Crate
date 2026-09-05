@@ -24,8 +24,13 @@ struct ContentView: View {
 
                 DeckBarDivider(height: $model.deckBarHeight)
 
+                // **`minHeight` e non `height`.** Con un'altezza imposta, una fascia più corta del
+                // suo contenuto non lo comprime: lo lascia debordare, centrato — tagliato sotto
+                // dal bordo della finestra e sopra **sopra la maniglia**, che spariva. Erano due
+                // sintomi della stessa cosa. Così invece la fascia non scende mai sotto ciò che
+                // le serve, e sopra quel pavimento l'altezza resta quella scelta trascinando.
                 DeckBarView()
-                    .frame(height: model.deckBarHeight)
+                    .frame(minHeight: model.deckBarHeight)
             }
         }
         .toolbar {

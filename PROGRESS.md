@@ -315,6 +315,24 @@ tempo escono dalla stessa passata, perché condividono la decodifica, che è la 
 l'import da YouTube, *«Waveform, deck audio con CUE e hot cue, editor delle scalette»* che chiude
 M3, M4 e M5, e la ripartenza a freddo aggiornata.
 
+## Correzioni dopo la prova di Gabriel (2026-09-05)
+
+- [x] `done` — **La fascia dei deck usciva dallo schermo, e la maniglia era sparita.** Un sintomo
+  solo: `ContentView` imponeva l'altezza con `.frame(height:)`, e una fascia più corta del suo
+  contenuto non lo comprime — lo lascia debordare **centrato**, quindi tagliato sotto dal bordo
+  della finestra e sopra sopra la maniglia, che finiva coperta. Ora è `.frame(minHeight:)`: la
+  fascia non scende mai sotto ciò che le serve. In più il pavimento del trascinamento dipende
+  dalla disposizione (400 impilati, 240 affiancati) invece di essere un 300 fisso, e la maniglia
+  è più alta, più larga e si accende passandoci sopra
+- [x] `done` — **Due pulsantini `−` e `+` per il pitch**, ai lati della percentuale: un colpo vale
+  **0,05%** (0,064 BPM a 128), con ⇧ **0,5%**, e tenuti premuti si ripetono. Servono perché il
+  fader non arriva a quella precisione: con 200 punti di corsa per ±8%, un solo punto vale già
+  0,08%. Percentuale e BPM effettivo passati a **due decimali**, o un passo di rifinitura non si
+  vedrebbe muovere il numero
+- [x] `done` — **Icona dell'app**: un disco visto dall'alto, etichetta arancione come l'accento,
+  testina appoggiata. Generata da `Scripts/make-app-icon.swift` in tutte e dieci le misure, con i
+  PNG versionati in `App/Assets.xcassets/AppIcon.appiconset`
+
 ## Prossimo passo — quello che serve a Gabriel, non al piano
 
 Il piano è finito. Quello che resta è **provare l'app usandola**, che è la sola cosa che qui non

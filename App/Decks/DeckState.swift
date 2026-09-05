@@ -334,6 +334,22 @@ final class DeckState: Identifiable {
         return bpm * (1 + storedPitchPercent / 100)
     }
 
+    /// Di quanto si sposta il pitch con un colpo dei pulsantini `−` e `+`.
+    ///
+    /// Cinque centesimi di percento: a 128 BPM sono 0,064 BPM, cioè lo scarto che si sente come
+    /// una fase che scivola piano e non come un cambio di velocità. È la rifinitura che si fa
+    /// **dopo** aver messo il fader a occhio, e che con un fader lungo 200 punti non si otterrebbe
+    /// — un punto di corsa vale già 0,08%.
+    static let pitchStepPercent = 0.05
+    /// Con ⇧ il passo si fa dieci volte più grosso, come sui campi numerici di macOS.
+    static let pitchCoarseStepPercent = 0.5
+
+    /// Sposta il pitch di un passo fine, senza toccare la spinta momentanea.
+    func stepPitch(up: Bool, coarse: Bool) {
+        let step = coarse ? Self.pitchCoarseStepPercent : Self.pitchStepPercent
+        pitchPercent += up ? step : -step
+    }
+
     /// Un colpetto: sposta la testina di un passo esatto.
     func nudge(forward: Bool) {
         guard let engine, engine.hasTrack else { return }

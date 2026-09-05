@@ -68,7 +68,7 @@ final class AppModel {
     var deckBarHeight: Double {
         get { storedDeckBarHeight }
         set {
-            storedDeckBarHeight = min(max(300, newValue), 700)
+            storedDeckBarHeight = min(max(deckLayout.minimumBarHeight, newValue), 900)
             UserDefaults.standard.set(storedDeckBarHeight, forKey: "deckBarHeight")
         }
     }
@@ -92,6 +92,20 @@ final class AppModel {
             case .sideBySide: "Affiancati"
             }
         }
+
+        /// Sotto questa altezza la fascia non ha più senso: impilati servono due deck interi più
+        /// il mixer, affiancati uno solo.
+        ///
+        /// Il numero **non è la garanzia** che niente venga tagliato — quella la dà il `minHeight`
+        /// in `ContentView`, che lascia crescere la fascia fino al suo contenuto. Serve a far
+        /// fermare il trascinamento dove ha senso, invece di lasciar scrivere in preferenze
+        /// un'altezza che poi non si vede applicata.
+        var minimumBarHeight: Double {
+            switch self {
+            case .stacked: 400
+            case .sideBySide: 240
+            }
+        }
     }
 
     var deckLayout: DeckLayout {
@@ -99,6 +113,10 @@ final class AppModel {
         set {
             storedDeckLayout = newValue
             UserDefaults.standard.set(newValue.rawValue, forKey: "deckLayout")
+            // Passando da affiancati a impilati serve il doppio dell'altezza: senza questo, la
+            // fascia resterebbe con il numero vecchio e si allargherebbe da sé al primo disegno,
+            // lasciando in preferenze un valore che non corrisponde a quello che si vede.
+            deckBarHeight = storedDeckBarHeight
         }
     }
 

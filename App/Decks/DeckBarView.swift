@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import DJKit
 
@@ -176,9 +177,7 @@ private struct DeckStrip: View {
                 .frame(maxHeight: .infinity)
                 .help("Trascina per cambiare velocità · doppio clic per tornare a zero")
 
-            Text(pitchLabel)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(deck.pitchPercent == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+            pitchTrim
 
             bpmButton
 
@@ -199,11 +198,65 @@ private struct DeckStrip: View {
                 )
             }
         }
-        .frame(width: 68)
+        // Novanta e non sessantotto: i due pulsantini di rifinitura stanno sulla stessa riga
+        // della percentuale, che adesso ha due decimali.
+        .frame(width: 90)
     }
 
+    /// La percentuale del pitch, con un `−` e un `+` ai lati per rifinirla.
+    ///
+    /// Il fader serve a mettersi vicino, i due pulsantini a chiudere: con una corsa di 200 punti
+    /// per ±8% un solo punto vale già 0,08%, e a mano quella precisione non si tiene. Un colpo
+    /// sposta di 0,05% (0,064 BPM a 128), con ⇧ di 0,5%.
+    private var pitchTrim: some View {
+        HStack(spacing: 2) {
+            trimButton(up: false)
+
+            Text(pitchLabel)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(deck.pitchPercent == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+                .frame(maxWidth: .infinity)
+
+            trimButton(up: true)
+        }
+    }
+
+    /// Lo stesso linguaggio visivo dei tasti di nudge — riquadro col bordo, non un pulsante di
+    /// sistema — e per una ragione pratica: `.buttonStyle(.bordered)` aggiunge sei punti di
+    /// margine per lato, e due pulsanti così nella colonna del pitch mandavano la percentuale a
+    /// capo.
+    private func trimButton(up: Bool) -> some View {
+        Button {
+            model.focus(deck.slot)
+            // Lo shift si legge dallo stato corrente dei modificatori: un `Button` di SwiftUI non
+            // riporta quali tasti erano premuti quando è stato cliccato.
+            deck.stepPitch(up: up, coarse: NSEvent.modifierFlags.contains(.shift))
+        } label: {
+            Image(systemName: up ? "plus" : "minus")
+                .font(.system(size: 8, weight: .bold))
+                .frame(width: 18, height: 15)
+                .background(
+                    Color(nsColor: .controlColor),
+                    in: RoundedRectangle(cornerRadius: 3)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3).strokeBorder(.separator)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 3))
+        }
+        .buttonStyle(.plain)
+        // Tenuto premuto continua a scattare: rifinire di mezzo punto percentuale un colpo per
+        // volta sarebbe dieci clic.
+        .buttonRepeatBehavior(.enabled)
+        .help(up
+            ? "Alza il pitch di 0,05% · con ⇧ di 0,5%"
+            : "Abbassa il pitch di 0,05% · con ⇧ di 0,5%")
+    }
+
+    /// **Due decimali, non uno.** Con un solo decimale i pulsantini da 0,05% non muoverebbero il
+    /// numero a colpi alterni, e un comando che sembra non fare niente si preme due volte.
     private var pitchLabel: String {
-        String(format: "%+.1f%%", deck.pitchPercent)
+        String(format: "%+.2f%%", deck.pitchPercent)
     }
 
     /// Il display del BPM è anche il modo di aprire l'editor della griglia: è il numero che si
@@ -241,7 +294,9 @@ private struct DeckStrip: View {
     /// Senza analisi del tempo il BPM non c'è: meglio un trattino che un numero inventato.
     private var bpmLabel: String {
         guard let bpm = deck.effectiveBPM else { return "— BPM" }
-        return String(format: "%.1f BPM", bpm)
+        // Anche qui due decimali: è il numero che si confronta con l'altro deck, e un passo di
+        // rifinitura vale 0,06 BPM — invisibile arrotondando al decimo.
+        return String(format: "%.2f BPM", bpm)
     }
 
     private func nudge(forward: Bool) {

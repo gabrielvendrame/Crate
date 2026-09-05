@@ -58,3 +58,7 @@ targets:
         DEVELOPMENT_TEAM: ""
         COMBINE_HIDPI_IMAGES: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # L'icona sta in App/Assets.xcassets/AppIcon.appiconset ed è **versionata**: si rigenera
+        # con `swift Scripts/make-app-icon.swift`, ma i PNG sono nel repository, così chi clona
+        # compila senza dover eseguire niente.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
