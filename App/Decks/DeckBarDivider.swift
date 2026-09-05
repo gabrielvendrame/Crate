@@ -35,8 +35,12 @@ struct DeckBarDivider: View {
             // Il cursore dice che si può trascinare, come su un divisore vero.
             if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
         }
+        // **`.global`, non lo spazio della vista.** La maniglia si sposta mentre la si trascina —
+        // è lei il bordo che si muove — e nel suo stesso sistema di riferimento lo spostamento
+        // risulta la differenza fra quanto si è mosso il puntatore e quanto si è mossa lei:
+        // metà. La fascia seguiva il mouse a velocità dimezzata, come se scivolasse.
         .gesture(
-            DragGesture(minimumDistance: 1)
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { value in
                     let anchor = dragAnchor ?? height
                     if dragAnchor == nil { dragAnchor = anchor }

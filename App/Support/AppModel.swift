@@ -65,12 +65,32 @@ final class AppModel {
     /// Altezza della fascia dei deck, decisa trascinando la maniglia e ricordata fra un avvio e
     /// l'altro. È un numero nostro e non una divisione calcolata da `VSplitView`, che cambiando
     /// vista la rifaceva a modo suo.
+    /// L'altezza della fascia dei deck. È **esattamente** quella che la fascia riceve: la
+    /// maniglia la scrive, e nient'altro la corregge dietro le quinte.
     var deckBarHeight: Double {
         get { storedDeckBarHeight }
         set {
             storedDeckBarHeight = min(max(deckLayout.minimumBarHeight, newValue), 900)
             UserDefaults.standard.set(storedDeckBarHeight, forKey: "deckBarHeight")
         }
+    }
+
+    /// La fascia dice quanto spazio ha davvero occupato, e se ha dovuto debordare la si allarga.
+    ///
+    /// **Solo verso l'alto, e solo quando deborda.** Il contenuto della fascia non si comprime:
+    /// proponendogli meno spazio di quanto gli serve, esce dalla cornice invece di stringersi.
+    /// Quindi una misura più grande della cornice è il suo minimo vero, e va portata nella
+    /// cornice; una misura uguale alla cornice non dice niente di nuovo — è la fascia che riempie
+    /// lo spazio che le è stato dato.
+    ///
+    /// Distinguere i due casi è tutto il punto. Tenendo un "pavimento" aggiornato **anche** nel
+    /// secondo caso, ogni allargamento lo alzava e la fascia non tornava più piccola: era il
+    /// difetto per cui il ridimensionamento sembrava non funzionare più. Così invece il minimo si
+    /// riscopre da solo ogni volta che si prova a stringere, e non resta appeso alla
+    /// configurazione di prima — deck pieni o vuoti, impilati o affiancati.
+    func noteDeckBarContentHeight(_ height: Double) {
+        guard height > storedDeckBarHeight + 0.5 else { return }
+        deckBarHeight = height
     }
 
     private var storedDeckBarHeight: Double =
@@ -93,17 +113,21 @@ final class AppModel {
             }
         }
 
-        /// Sotto questa altezza la fascia non ha più senso: impilati servono due deck interi più
-        /// il mixer, affiancati uno solo.
+        /// L'altezza sotto la quale il contenuto della fascia non entra più, **misurata**.
         ///
-        /// Il numero **non è la garanzia** che niente venga tagliato — quella la dà il `minHeight`
-        /// in `ContentView`, che lascia crescere la fascia fino al suo contenuto. Serve a far
-        /// fermare il trascinamento dove ha senso, invece di lasciar scrivere in preferenze
-        /// un'altezza che poi non si vede applicata.
+        /// Non stimata: con la fascia messa a un'altezza volutamente troppo bassa, il contenuto
+        /// deborda e riporta quanto gli serve — 346 impilati (due deck da 156 più il mixer), 203
+        /// affiancati. Per rimisurarli basta scrivere un'altezza piccola in preferenze e leggere
+        /// a quale valore l'app la corregge da sé al primo disegno.
+        ///
+        /// Il numero serve a far **fermare il trascinamento** dove ha senso, subito e senza
+        /// scatti. Se un giorno diventa sbagliato — una riga in più in un deck — non taglia
+        /// niente: `noteDeckBarContentHeight` se ne accorge e alza la fascia. È una rete, non
+        /// l'unica difesa.
         var minimumBarHeight: Double {
             switch self {
-            case .stacked: 400
-            case .sideBySide: 240
+            case .stacked: 348
+            case .sideBySide: 205
             }
         }
     }
@@ -113,10 +137,6 @@ final class AppModel {
         set {
             storedDeckLayout = newValue
             UserDefaults.standard.set(newValue.rawValue, forKey: "deckLayout")
-            // Passando da affiancati a impilati serve il doppio dell'altezza: senza questo, la
-            // fascia resterebbe con il numero vecchio e si allargherebbe da sé al primo disegno,
-            // lasciando in preferenze un valore che non corrisponde a quello che si vede.
-            deckBarHeight = storedDeckBarHeight
         }
     }
 

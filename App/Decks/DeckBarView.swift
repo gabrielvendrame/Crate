@@ -38,6 +38,17 @@ struct DeckBarView: View {
                 .frame(maxWidth: .infinity)
             }
         }
+        // Qui dentro la vista ha ancora la sua altezza naturale: la cornice che la stringe è
+        // applicata da `ContentView`, più fuori. È il solo punto da cui si può sapere quanto
+        // spazio le serve davvero.
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size.height, initial: true) { _, height in
+                        model.noteDeckBarContentHeight(height)
+                    }
+            }
+        }
         .background(.quaternary)
     }
 }

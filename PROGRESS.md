@@ -320,10 +320,20 @@ M3, M4 e M5, e la ripartenza a freddo aggiornata.
 - [x] `done` — **La fascia dei deck usciva dallo schermo, e la maniglia era sparita.** Un sintomo
   solo: `ContentView` imponeva l'altezza con `.frame(height:)`, e una fascia più corta del suo
   contenuto non lo comprime — lo lascia debordare **centrato**, quindi tagliato sotto dal bordo
-  della finestra e sopra sopra la maniglia, che finiva coperta. Ora è `.frame(minHeight:)`: la
-  fascia non scende mai sotto ciò che le serve. In più il pavimento del trascinamento dipende
-  dalla disposizione (400 impilati, 240 affiancati) invece di essere un 300 fisso, e la maniglia
-  è più alta, più larga e si accende passandoci sopra
+  della finestra e sopra sopra la maniglia, che finiva coperta. Il fondo di 300 era sotto il
+  minimo reale, che è **346** impilati e **203** affiancati — misurati, non stimati: si mette in
+  preferenze un'altezza troppo bassa e si legge a quale valore l'app la corregge al primo
+  disegno. La maniglia è anche più alta, più larga, e si accende passandoci sopra
+- [x] `done` — **Poi la fascia non si ridimensionava più**, segnalato da Gabriel: `minHeight` la
+  rendeva elastica come il contenuto sopra, e si prendeva tutto lo spazio. Torna l'altezza esatta,
+  con due difese: il trascinamento si ferma al minimo misurato, e se quel numero un giorno
+  diventasse sbagliato `noteDeckBarContentHeight` se ne accorge — il contenuto riporta quanto ha
+  occupato davvero, e se ha dovuto debordare la fascia si alza. **La rete non basta da sola**:
+  scatta quando la misura cambia, e trascinando ancora più in giù la misura resta ferma
+- [x] `done` — **Il trascinamento andava a metà velocità.** `DragGesture` misurava nello spazio
+  della maniglia, che è proprio il bordo che si sposta: lo spostamento risultava la differenza fra
+  quanto si muoveva il puntatore e quanto si muoveva lei. Con `coordinateSpace: .global` la fascia
+  segue il mouse 1:1 — verificato: da 500 a 380 con 120 punti, a 580 con 200 in su
 - [x] `done` — **Due pulsantini `−` e `+` per il pitch**, ai lati della percentuale: un colpo vale
   **0,05%** (0,064 BPM a 128), con ⇧ **0,5%**, e tenuti premuti si ripetono. Servono perché il
   fader non arriva a quella precisione: con 200 punti di corsa per ±8%, un solo punto vale già
