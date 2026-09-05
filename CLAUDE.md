@@ -34,7 +34,10 @@ Queste sono esclusioni volute. Non aggiungerle "perché sarebbe utile".
 - **Nessun export** (né PDF, né testo, né copia dei file).
 - **Un solo device audio in uscita.** Niente preascolto in cuffia su device separato.
 - **Solo quattro campi di metadati**: titolo, artista, album — più le foto dell'etichetta. Niente
-  genere, anno, rating, commenti, energy.
+  genere, anno, rating, commenti, energy. **Con un'eccezione chiesta da Gabriel il 2026-09-05: i
+  tag.** Non sono un campo fisso in più — sono etichette che se le definisce lui («disco»,
+  «funky») e servono a ritrovare i dischi in cassa. Il confine resta valido per tutto il resto: i
+  campi fissi restano quattro. Vedi M8.2 in `PROGRESS.md`.
 - **Beatgrid a BPM costante** (offset del downbeat + BPM). Niente beatgrid a marker multipli.
 - **Quantize: solo i cue, e uno solo per tutta l'app.** Senza loop non c'è altro da
   quantizzare. Risoluzione **1/1 o 1/2** (scelta di Gabriel del 2026-09-05, dal picker nel mixer;
