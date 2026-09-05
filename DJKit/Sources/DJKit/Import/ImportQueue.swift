@@ -7,6 +7,7 @@ public enum ImportJobState: Sendable, Equatable {
     case downloading
     case converting
     case importing
+    case analyzing
     case finished
     case failed
 
@@ -59,6 +60,7 @@ public final class ImportQueue {
     private let converter: AudioConverter
     private let repository: TrackRepository
     private let paths: LibraryPaths
+    private let analyzer: TrackAnalyzer
     private var isDraining = false
 
     public init(
@@ -71,6 +73,7 @@ public final class ImportQueue {
         self.converter = converter
         self.repository = repository
         self.paths = paths
+        self.analyzer = TrackAnalyzer(paths: paths, repository: repository)
     }
 
     public var activeCount: Int {
@@ -178,9 +181,21 @@ public final class ImportQueue {
             track.durationSeconds = fileInfo.durationSeconds
             track.sampleRate = fileInfo.sampleRate
             track.channelCount = fileInfo.channelCount
-            // L'analisi di peaks e tempo entra qui in M3/M6.
-            track.analysisState = .ready
+            track.analysisState = .analyzing
             try await repository.save(track)
+
+            // Peaks: è l'ultimo passo perché è l'unico che si può rifare da solo in seguito, e
+            // una traccia senza waveform resta comunque in libreria. Il rilevamento del tempo si
+            // aggancia qui in M6.
+            update(jobID) {
+                $0.state = .analyzing
+                $0.progress = 0
+            }
+            try await analyzer.analyze(track: track) { [weak self] fraction in
+                Task { @MainActor in
+                    self?.update(jobID) { $0.progress = fraction }
+                }
+            }
 
             update(jobID) {
                 $0.displayTitle = track.displayName

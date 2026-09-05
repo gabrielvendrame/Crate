@@ -59,6 +59,23 @@ public struct TrackRepository: Sendable {
         }
     }
 
+    /// Segna l'analisi conclusa scrivendo solo le sue colonne.
+    ///
+    /// Un `save` della traccia intera cancellerebbe le correzioni fatte nell'ispettore mentre
+    /// l'analisi girava: sono minuti, non millisecondi.
+    public func updatePeaks(trackID: String, filename: String?) async throws {
+        try await database.writer.write { db in
+            try db.execute(
+                sql: """
+                    UPDATE track
+                    SET peaksFilename = ?, analysisState = ?, analysisError = NULL
+                    WHERE id = ?
+                    """,
+                arguments: [filename, AnalysisState.ready.rawValue, trackID]
+            )
+        }
+    }
+
     /// Osservazione della libreria intera, per tenere aggiornata la tabella senza ricaricarla a mano.
     public func observeAllTracks() -> ValueObservation<ValueReducers.Fetch<[Track]>> {
         ValueObservation.tracking { db in

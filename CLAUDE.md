@@ -28,20 +28,32 @@ Queste sono esclusioni volute. Non aggiungerle "perché sarebbe utile".
 - **Niente loop** (né auto-loop, né loop in/out).
 - **Niente keylock / time-stretch.** Il pitch è **solo varispeed**: velocità e tonalità legate,
   come su un giradischi reale. È il comportamento che serve per prevedere cosa succederà davvero
-  sui piatti.
+  sui piatti. Corsa del fader **±8%**, come un SL-1200: un range più largo darebbe un'idea
+  sbagliata di quanto si potrà tirare il pezzo sul piatto vero.
 - **Solo YouTube** come sorgente. Niente import di file locali, niente altre piattaforme.
 - **Nessun export** (né PDF, né testo, né copia dei file).
 - **Un solo device audio in uscita.** Niente preascolto in cuffia su device separato.
 - **Solo quattro campi di metadati**: titolo, artista, album — più le foto dell'etichetta. Niente
   genere, anno, rating, commenti, energy.
 - **Beatgrid a BPM costante** (offset del downbeat + BPM). Niente beatgrid a marker multipli.
+- **Niente memory cue.** Solo gli **8 hot cue**, ognuno con nome e nota. Deciso da Gabriel il
+  2026-09-04 usando l'app, e **sostituisce il punto 2 di `PLAN.md`** che prevedeva anche memory
+  cue illimitati. La colonna `hotcueSlot` resta annullabile — è così che `assignHotCue` libera uno
+  slot senza violare l'indice unico — ma un cue senza slot è un residuo, non una funzione.
 
 ## Vincolo di layout: waveform orizzontali a piena larghezza
 
-Le waveform scorrono **in orizzontale**, tempo da sinistra a destra, e occupano tutta la larghezza
-della finestra. Di conseguenza **i due deck sono impilati** — A sopra, B sotto — come in rekordbox,
-**non affiancati**: affiancarli dimezzerebbe la larghezza di ogni waveform e renderebbe illeggibile
-proprio la cosa che serve guardare. Vale sia per l'overview sia per la vista zoomata.
+Le waveform scorrono **in orizzontale**, tempo da sinistra a destra. **Di default i due deck sono
+impilati** — A sopra, B sotto — come in rekordbox, così ogni waveform occupa tutta la larghezza
+della finestra: è la disposizione da tenere come predefinita, perché affiancare i deck dimezza la
+larghezza di ogni waveform e rende meno leggibile proprio la cosa che serve guardare. Vale sia per
+l'overview sia per la vista zoomata.
+
+Su richiesta di Gabriel (2026-09-04) i deck si potranno **anche** affiancare su due colonne, come
+alternativa scelta dall'utente e non come nuovo default: le waveform restano orizzontali in
+entrambi i casi, cambia solo quanta larghezza ha ciascuna. Il compromesso è quello scritto sopra e
+va tenuto presente, non ridiscusso: chi trova il codice con due disposizioni non sta guardando una
+regressione.
 
 ## Decisioni architetturali e il loro perché
 
@@ -67,6 +79,20 @@ scambia un puntatore e il buffer vecchio viene liberato dal main thread al ciclo
 Questa è la regola più facile da violare per sbaglio e la più difficile da diagnosticare dopo:
 qualsiasi modifica dentro il callback va guardata con questo metro.
 
+In pratica: il callback **non vede mai un oggetto Swift**. Il main pubblica un `DeckTrackRef` —
+puntatori ai canali e quattro numeri, in memoria raw — e ne scambia l'indirizzo con un'atomica;
+il riferimento forte al `DecodedTrack` resta sul main, che lo libera solo dopo che il contatore di
+render è avanzato oltre lo scambio. Risalire all'oggetto da un `Unmanaged` dentro il callback
+sembra equivalente e non lo è: legarlo a una variabile locale genera una retain/release, che è una
+chiamata di runtime con un lock dentro.
+
+Per lo stesso motivo il render block **non va creato dentro un contesto `@MainActor`**:
+`AVAudioSourceNodeRenderBlock` è importato senza `@Sendable`, quindi la closure eredita
+l'isolamento e il compilatore le mette in testa un controllo di esecutore che sul thread audio fa
+`SIGTRAP` al primo buffer. Va costruito in un metodo `nonisolated` con la closure `@Sendable`
+(`DeckEngine.makeRenderBlock`). Non è un errore di compilazione né un avviso: si manifesta solo
+premendo play.
+
 **Persistenza: GRDB 7 (SQLite), non SwiftData.** Migrazioni esplicite e leggibili, e controllo
 totale sulla colonna `position` che ordina le playlist — che è il punto dove SwiftData dà più
 problemi. `ValueObservation` aggiorna la UI sul main actor.
@@ -75,6 +101,11 @@ problemi. `ValueObservation` aggiorna la UI sul main actor.
 4096/1024/256/64 sample così overview e vista zoomata si disegnano entrambe dalla stessa cache
 senza ricalcoli. Le tre bande (low < 200 Hz, mid 200 Hz–4 kHz, high > 4 kHz) servono a colorare la
 waveform come rekordbox: è ciò che fa riconoscere a colpo d'occhio dove entra la cassa.
+
+Nel file `.peaks` le bande sono l'**RMS vero**. La compensazione della pendenza naturale dello
+spettro — senza la quale ogni waveform verrebbe blu da capo a fondo — è una scelta di
+presentazione e vive nei guadagni `1 / 3 / 12`, che stanno **in due posti**:
+`WaveformPalette.bandGain` e `kBandGain` in `Waveform.metal`. Vanno cambiati insieme.
 
 **yt-dlp si impacchetta nella variante "onedir" (`yt-dlp_macos.zip`), mai come binario singolo.**
 Il binario singolo è un PyInstaller *onefile*: si riespande in una cartella temporanea a ogni
@@ -155,6 +186,13 @@ dipendono da un video che potrebbe sparire.
 
 `xcodegen` si installa con `brew install xcodegen` (una tantum). Dopo aver aggiunto o rimosso file
 o dipendenze in `project.yml`, rigenera il progetto prima di compilare.
+
+Il **toolchain Metal non è incluso in Xcode** e va scaricato una volta, altrimenti
+`App/Decks/Waveform.metal` non compila ("cannot execute tool 'metal'"):
+
+```bash
+xcodebuild -downloadComponent MetalToolchain
+```
 
 ## Convenzioni
 

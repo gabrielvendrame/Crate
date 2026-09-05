@@ -11,11 +11,20 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } detail: {
-            VSplitView {
+            // **Non `VSplitView`.** È un `NSSplitView` e non propaga ai figli l'inset della
+            // toolbar: il contenuto partiva dal bordo superiore della finestra e il titolo ci
+            // finiva scritto sopra. Con una `VStack` il contenuto rispetta la toolbar, e
+            // l'altezza dei deck è un numero nostro invece di una divisione che il framework
+            // ricalcola ogni volta che cambia la vista sopra — che è come la fascia finiva
+            // schiacciata al minimo entrando in una scaletta.
+            VStack(spacing: 0) {
                 detail
-                    .frame(minHeight: 280)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                DeckBarDivider(height: $model.deckBarHeight)
+
                 DeckBarView()
-                    .frame(minHeight: 220, idealHeight: 260)
+                    .frame(height: model.deckBarHeight)
             }
         }
         .toolbar {

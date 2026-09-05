@@ -3,7 +3,9 @@ import PackageDescription
 
 let package = Package(
     name: "DJKit",
-    platforms: [.macOS(.v14)],
+    // macOS 15 per `Synchronization.Atomic`, che è ciò con cui il render callback audio
+    // comunica col main senza lock. L'app punta comunque a macOS 26.
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "DJKit", targets: ["DJKit"])
     ],

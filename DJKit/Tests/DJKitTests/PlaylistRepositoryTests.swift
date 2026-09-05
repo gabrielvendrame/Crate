@@ -35,6 +35,44 @@ struct PlaylistRepositoryTests {
         #expect(entries.map(\.track?.title) == ["Traccia 0", "Traccia 1", "Traccia 2", "Traccia 3"])
     }
 
+    /// È il caso del drop in mezzo alla scaletta, che è il gesto principale dell'editor.
+    @Test("Un brano lasciato cadere su una riga si incunea prima di quella")
+    func trackInsertsBeforeRow() async throws {
+        let (repository, playlist, tracks) = try await makeFixture()
+        for track in tracks.prefix(3) {
+            try await repository.appendTrack(track.id, to: playlist.id)
+        }
+
+        try await repository.insertTrack(tracks[3].id, into: playlist.id, at: 1)
+
+        let entries = try await repository.entries(playlistID: playlist.id)
+        #expect(entries.map(\.item.position) == [0, 1, 2, 3])
+        #expect(
+            entries.map(\.track?.title)
+                == ["Traccia 0", "Traccia 3", "Traccia 1", "Traccia 2"]
+        )
+    }
+
+    /// Trascinando più brani insieme, l'editor li inserisce uno dopo l'altro a indici crescenti:
+    /// se l'ordine si rovesciasse, una selezione multipla arriverebbe in scaletta al contrario.
+    @Test("Più brani inseriti di fila allo stesso punto restano nell'ordine in cui sono partiti")
+    func multipleInsertsKeepDropOrder() async throws {
+        let (repository, playlist, tracks) = try await makeFixture()
+        try await repository.appendTrack(tracks[0].id, to: playlist.id)
+        try await repository.appendTrack(tracks[1].id, to: playlist.id)
+
+        for (offset, track) in tracks[2...3].enumerated() {
+            try await repository.insertTrack(track.id, into: playlist.id, at: 1 + offset)
+        }
+
+        let entries = try await repository.entries(playlistID: playlist.id)
+        #expect(entries.map(\.item.position) == [0, 1, 2, 3])
+        #expect(
+            entries.map(\.track?.title)
+                == ["Traccia 0", "Traccia 2", "Traccia 3", "Traccia 1"]
+        )
+    }
+
     @Test("Una nota si incunea fra due brani facendo scorrere i successivi")
     func noteInsertsBetweenTracks() async throws {
         let (repository, playlist, tracks) = try await makeFixture()

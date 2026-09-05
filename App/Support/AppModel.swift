@@ -23,6 +23,50 @@ final class AppModel {
     private(set) var tracks: TrackRepository?
     private(set) var playlists: PlaylistRepository?
     private(set) var importQueue: ImportQueue?
+    private(set) var analyzer: TrackAnalyzer?
+    /// Il grafo audio. `nil` solo se l'uscita non si è potuta configurare: in quel caso la
+    /// libreria resta usabile e sono i deck a restare muti.
+    private(set) var audioGraph: AudioGraph?
+
+    /// I due deck, impilati in fondo alla finestra: A sopra, B sotto.
+    let deckA = DeckState(slot: .a)
+    let deckB = DeckState(slot: .b)
+
+    /// Il deck su cui agiscono i tasti `1`–`8`. Due deck e una tastiera sola: senza un deck
+    /// "attivo" le scorciatoie non saprebbero a chi parlare. Cambia caricando una traccia o
+    /// toccando un controllo di quel deck, e si vede dalla barra accesa sul suo bordo.
+    private(set) var focusedDeckSlot: DeckState.Slot = .a
+
+    private var keyMonitor: DeckKeyMonitor?
+
+    /// Altezza della fascia dei deck, decisa trascinando la maniglia e ricordata fra un avvio e
+    /// l'altro. È un numero nostro e non una divisione calcolata da `VSplitView`, che cambiando
+    /// vista la rifaceva a modo suo.
+    var deckBarHeight: Double {
+        get { storedDeckBarHeight }
+        set {
+            storedDeckBarHeight = min(max(300, newValue), 700)
+            UserDefaults.standard.set(storedDeckBarHeight, forKey: "deckBarHeight")
+        }
+    }
+
+    private var storedDeckBarHeight: Double =
+        UserDefaults.standard.object(forKey: "deckBarHeight") as? Double ?? 400
+
+    /// Posizione del crossfader: 0 tutto sul deck A, 1 tutto sul B, 0,5 entrambi.
+    ///
+    /// Copia osservabile di `AudioGraph.crossfader`, che vive fuori da `@Observable`. Il fermo al
+    /// centro sta qui e non nella vista: vale per qualunque cosa lo muova.
+    var crossfader: Double {
+        get { storedCrossfader }
+        set {
+            let clamped = min(max(0, newValue), 1)
+            storedCrossfader = abs(clamped - 0.5) < 0.03 ? 0.5 : clamped
+            audioGraph?.crossfader = storedCrossfader
+        }
+    }
+
+    private var storedCrossfader: Double = 0.5
 
     /// Se l'apertura della libreria fallisce lo diciamo, invece di mostrare un'app vuota e muta.
     private(set) var startupError: String?
@@ -35,6 +79,8 @@ final class AppModel {
     var selectedTrackIDs: Set<String> = []
     var isImportSheetPresented = false
     var isInspectorPresented = true
+    /// Tracce su cui è in corso un ricalcolo manuale della waveform.
+    private(set) var analyzingTrackIDs: Set<String> = []
 
     private var observers: [AnyDatabaseCancellable] = []
 
@@ -51,6 +97,7 @@ final class AppModel {
             self.database = database
             self.tracks = trackRepository
             self.playlists = PlaylistRepository(database: database)
+            self.analyzer = TrackAnalyzer(paths: paths, repository: trackRepository)
             self.importQueue = ImportQueue(
                 runner: YtDlpRunner(locator: locator),
                 converter: AudioConverter(locator: locator),
@@ -61,6 +108,30 @@ final class AppModel {
         } catch {
             startupError = String(describing: error)
         }
+
+        if let paths, let tracks {
+            for deck in [deckA, deckB] {
+                deck.configure(paths: paths, repository: tracks)
+                deck.reportError = { [weak self] message in self?.transientError = message }
+            }
+        }
+
+        // Il grafo audio si crea a parte: un device di uscita che manca non deve impedire di
+        // importare e catalogare, che sono metà del lavoro.
+        do {
+            let graph = try AudioGraph()
+            audioGraph = graph
+            deckA.attach(engine: graph.makeDeck())
+            deckB.attach(engine: graph.makeDeck())
+        } catch {
+            transientError = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
+
+        keyMonitor = DeckKeyMonitor { [weak self] slot, isDeleting in
+            self?.handleHotCueKey(slot: slot, deleting: isDeleting)
+        }
+        keyMonitor?.install()
     }
 
     private func startObserving(database: AppDatabase) {
@@ -120,11 +191,97 @@ final class AppModel {
             do {
                 try await tracks.deleteTrack(id: track.id)
                 selectedTrackIDs.remove(track.id)
+                if deckA.track?.id == track.id { deckA.clear() }
+                if deckB.track?.id == track.id { deckB.clear() }
                 for url in filesToRemove {
                     try? FileManager.default.removeItem(at: url)
                 }
             } catch {
                 transientError = "Eliminazione non riuscita: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    // MARK: - Deck
+
+    func deck(_ slot: DeckState.Slot) -> DeckState {
+        slot == .a ? deckA : deckB
+    }
+
+    /// Carica una traccia su un deck. Senza waveform calcolata il deck lo dice invece di restare
+    /// vuoto senza spiegazioni: il ricalcolo è a un clic di distanza dalla libreria.
+    func load(_ track: Track, on slot: DeckState.Slot) {
+        let deck = deck(slot)
+        // Chi carica vuole lavorare su quel deck: il fuoco lo segue.
+        focus(slot)
+        Task { await deck.load(track: track, analyzer: analyzer) }
+    }
+
+    func focus(_ slot: DeckState.Slot) {
+        focusedDeckSlot = slot
+    }
+
+    private func handleHotCueKey(slot: Int, deleting: Bool) {
+        let deck = deck(focusedDeckSlot)
+        if deleting {
+            deck.deleteHotCue(slot: slot)
+        } else {
+            deck.pressHotCue(slot: slot)
+        }
+    }
+
+    // MARK: - Analisi
+
+    func isAnalyzing(_ track: Track) -> Bool {
+        analyzingTrackIDs.contains(track.id)
+    }
+
+    /// Ricalcola la waveform di una traccia già in libreria.
+    ///
+    /// Serve alle tracce importate prima che l'analisi esistesse e a quelle il cui file `.peaks`
+    /// è stato cancellato o è illeggibile.
+    func reanalyze(_ track: Track) {
+        guard let analyzer, !analyzingTrackIDs.contains(track.id) else { return }
+        analyzingTrackIDs.insert(track.id)
+        Task {
+            defer { analyzingTrackIDs.remove(track.id) }
+            do {
+                let updated = try await analyzer.analyze(track: track)
+                await deckA.reloadPeaks(track: updated, analyzer: analyzer)
+                await deckB.reloadPeaks(track: updated, analyzer: analyzer)
+            } catch {
+                transientError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+        }
+    }
+
+    var tracksWithoutWaveform: [Track] {
+        trackList.filter { $0.peaksFilename == nil && $0.audioFilename != nil }
+    }
+
+    /// Analizza in fila tutte le tracce che non hanno ancora una waveform.
+    ///
+    /// In fila e non in parallelo: ogni analisi tiene in RAM la traccia decodificata per intero —
+    /// oltre 100 MB — e farne partire dieci insieme svuoterebbe la memoria senza finire prima.
+    func analyzeTracksWithoutWaveform() {
+        guard let analyzer else { return }
+        let pending = tracksWithoutWaveform.filter { !analyzingTrackIDs.contains($0.id) }
+        guard !pending.isEmpty else { return }
+
+        analyzingTrackIDs.formUnion(pending.map(\.id))
+        Task {
+            for track in pending {
+                defer { analyzingTrackIDs.remove(track.id) }
+                do {
+                    let updated = try await analyzer.analyze(track: track)
+                    await deckA.reloadPeaks(track: updated, analyzer: analyzer)
+                    await deckB.reloadPeaks(track: updated, analyzer: analyzer)
+                } catch {
+                    // Una traccia rotta non deve fermare le altre: il motivo resta sulla riga,
+                    // che la tabella mostra come stato "Errore".
+                    continue
+                }
             }
         }
     }
@@ -200,6 +357,83 @@ final class AppModel {
             try? await playlists.deletePlaylist(id: id)
             if selection == .playlist(id) { selection = .library }
         }
+    }
+
+    // MARK: - Righe di scaletta
+
+    /// Accoda dei brani in fondo alla scaletta, nell'ordine dato.
+    func appendTracks(_ trackIDs: [String], to playlistID: String) {
+        guard let playlists, !trackIDs.isEmpty else { return }
+        Task {
+            do {
+                for trackID in trackIDs {
+                    try await playlists.appendTrack(trackID, to: playlistID)
+                }
+            } catch {
+                transientError = "Non ho potuto aggiungere il brano: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Inserisce dei brani a una certa altezza della scaletta, facendo scorrere il resto.
+    func insertTracks(_ trackIDs: [String], into playlistID: String, at index: Int) {
+        guard let playlists, !trackIDs.isEmpty else { return }
+        Task {
+            do {
+                for (offset, trackID) in trackIDs.enumerated() {
+                    try await playlists.insertTrack(trackID, into: playlistID, at: index + offset)
+                }
+            } catch {
+                transientError = "Non ho potuto inserire il brano: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Aggiunge una riga di nota. `index` a `nil` la mette in fondo.
+    func addNote(to playlistID: String, at index: Int? = nil) {
+        guard let playlists else { return }
+        Task {
+            do {
+                try await playlists.insertNote(into: playlistID, at: index)
+            } catch {
+                transientError = "Non ho potuto aggiungere la nota: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func save(item: PlaylistItem) {
+        guard let playlists else { return }
+        Task {
+            do { try await playlists.save(item) }
+            catch { transientError = "Salvataggio non riuscito: \(error.localizedDescription)" }
+        }
+    }
+
+    func deleteItems(ids: Set<String>, in playlistID: String) {
+        guard let playlists, !ids.isEmpty else { return }
+        Task {
+            do {
+                for id in ids {
+                    try await playlists.deleteItem(id: id, in: playlistID)
+                }
+            } catch {
+                transientError = "Non ho potuto eliminare la riga: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func reorderPlaylist(_ playlistID: String, orderedIDs: [String]) {
+        guard let playlists else { return }
+        Task {
+            do { try await playlists.reorder(playlistID: playlistID, orderedItemIDs: orderedIDs) }
+            catch { transientError = "Riordino non riuscito: \(error.localizedDescription)" }
+        }
+    }
+
+    /// Carica sul deck la traccia con questo identificativo, se esiste ancora in libreria.
+    func loadTrack(id: String, on slot: DeckState.Slot) {
+        guard let track = trackList.first(where: { $0.id == id }) else { return }
+        load(track, on: slot)
     }
 
     func rename(playlist: Playlist, to name: String) {

@@ -114,7 +114,7 @@ private struct ImportJobRow: View {
                         .font(.caption)
                         .foregroundStyle(job.state == .failed ? .red : .secondary)
                         .lineLimit(2)
-                } else if job.state == .downloading {
+                } else if job.state == .downloading || job.state == .analyzing {
                     ProgressView(value: job.progress)
                         .progressViewStyle(.linear)
                 } else if !job.state.isTerminal {
@@ -144,6 +144,7 @@ private struct ImportJobRow: View {
         case .downloading: "Scarico…"
         case .converting: "Converto in ALAC…"
         case .importing: "Aggiungo alla libreria…"
+        case .analyzing: "Calcolo la waveform…"
         case .finished: "Fatto"
         case .failed: "Errore"
         }
@@ -156,6 +157,7 @@ private struct ImportJobRow: View {
         case .downloading: "arrow.down.circle"
         case .converting: "arrow.triangle.2.circlepath"
         case .importing: "tray.and.arrow.down"
+        case .analyzing: "waveform"
         case .finished: "checkmark.circle.fill"
         case .failed: "exclamationmark.triangle.fill"
         }
