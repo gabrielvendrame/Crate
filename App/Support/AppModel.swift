@@ -68,6 +68,44 @@ final class AppModel {
 
     private var storedCrossfader: Double = 0.5
 
+    /// Il quantize: acceso, i cue si agganciano alla battuta più vicina della griglia.
+    ///
+    /// **Uno solo per tutta l'app, non uno per deck.** Sui CDJ è per lettore, ma lì si sta
+    /// suonando davanti a un pubblico e capita di volerlo spento solo di là; qui si prepara, e due
+    /// interruttori identici a due centimetri di distanza sarebbero solo un modo di non ricordare
+    /// più quale dei due si è toccato.
+    var isQuantizeEnabled: Bool {
+        get { storedQuantizeEnabled }
+        set {
+            storedQuantizeEnabled = newValue
+            UserDefaults.standard.set(newValue, forKey: "quantizeEnabled")
+            applyQuantizeToDecks()
+        }
+    }
+
+    var quantizeResolution: QuantizeResolution {
+        get { storedQuantizeResolution }
+        set {
+            storedQuantizeResolution = newValue
+            UserDefaults.standard.set(newValue.rawValue, forKey: "quantizeResolution")
+            applyQuantizeToDecks()
+        }
+    }
+
+    private var storedQuantizeEnabled: Bool =
+        UserDefaults.standard.object(forKey: "quantizeEnabled") as? Bool ?? true
+
+    private var storedQuantizeResolution: QuantizeResolution =
+        (UserDefaults.standard.string(forKey: "quantizeResolution"))
+            .flatMap(QuantizeResolution.init(rawValue:)) ?? .beat
+
+    private func applyQuantizeToDecks() {
+        for deck in [deckA, deckB] {
+            deck.isQuantizeEnabled = storedQuantizeEnabled
+            deck.quantizeResolution = storedQuantizeResolution
+        }
+    }
+
     /// Se l'apertura della libreria fallisce lo diciamo, invece di mostrare un'app vuota e muta.
     private(set) var startupError: String?
     /// Errori recuperabili durante l'uso (foto illeggibile, salvataggio fallito).
@@ -128,6 +166,8 @@ final class AppModel {
                 ?? error.localizedDescription
         }
 
+        applyQuantizeToDecks()
+
         keyMonitor = DeckKeyMonitor { [weak self] slot, isDeleting in
             self?.handleHotCueKey(slot: slot, deleting: isDeleting)
         }
@@ -141,7 +181,14 @@ final class AppModel {
             tracks.observeAllTracks().start(
                 in: database.reader,
                 onError: { [weak self] error in self?.transientError = String(describing: error) },
-                onChange: { [weak self] value in self?.trackList = value }
+                onChange: { [weak self] value in
+                    self?.trackList = value
+                    // I deck tengono una copia della traccia caricata: senza questa riga
+                    // continuerebbero a mostrare i metadati di quando è stata caricata e a
+                    // quantizzare su un BPM vecchio.
+                    self?.deckA.refreshTrack(from: value)
+                    self?.deckB.refreshTrack(from: value)
+                }
             )
         )
         observers.append(
@@ -173,6 +220,26 @@ final class AppModel {
         Task {
             do { try await tracks.save(track) }
             catch { transientError = "Salvataggio non riuscito: \(error.localizedDescription)" }
+        }
+    }
+
+    /// Corregge il BPM di una traccia dalla libreria, lasciando il downbeat dov'è.
+    ///
+    /// `nil` toglie la griglia insieme al BPM: un downbeat senza tempo non definisce niente.
+    /// Il deck su cui la traccia è caricata si aggiorna da sé, dall'osservazione della libreria.
+    func setBPM(_ bpm: Double?, for track: Track) {
+        guard let tracks else { return }
+        let offset = bpm == nil ? nil : track.beatgridOffsetSeconds
+        Task {
+            do {
+                try await tracks.updateBeatgrid(
+                    trackID: track.id,
+                    bpm: bpm,
+                    beatgridOffsetSeconds: offset
+                )
+            } catch {
+                transientError = "Non ho potuto salvare il BPM: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -256,17 +323,21 @@ final class AppModel {
         }
     }
 
-    var tracksWithoutWaveform: [Track] {
-        trackList.filter { $0.peaksFilename == nil && $0.audioFilename != nil }
+    /// Le tracce a cui manca la waveform **oppure** il BPM: l'analisi produce entrambi in una
+    /// passata sola, quindi non ha senso distinguere due elenchi.
+    var tracksWithoutAnalysis: [Track] {
+        trackList.filter {
+            $0.audioFilename != nil && ($0.peaksFilename == nil || $0.bpm == nil)
+        }
     }
 
-    /// Analizza in fila tutte le tracce che non hanno ancora una waveform.
+    /// Analizza in fila tutte le tracce a cui manca qualcosa.
     ///
     /// In fila e non in parallelo: ogni analisi tiene in RAM la traccia decodificata per intero —
     /// oltre 100 MB — e farne partire dieci insieme svuoterebbe la memoria senza finire prima.
-    func analyzeTracksWithoutWaveform() {
+    func analyzeTracksWithoutAnalysis() {
         guard let analyzer else { return }
-        let pending = tracksWithoutWaveform.filter { !analyzingTrackIDs.contains($0.id) }
+        let pending = tracksWithoutAnalysis.filter { !analyzingTrackIDs.contains($0.id) }
         guard !pending.isEmpty else { return }
 
         analyzingTrackIDs.formUnion(pending.map(\.id))

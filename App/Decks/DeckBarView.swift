@@ -25,6 +25,7 @@ private struct DeckStrip: View {
     let deck: DeckState
 
     @State private var isDropTargeted = false
+    @State private var isGridEditorPresented = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -148,9 +149,7 @@ private struct DeckStrip: View {
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(deck.pitchPercent == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
 
-            Text(bpmLabel)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
+            bpmButton
 
             HStack(spacing: 4) {
                 NudgeButton(
@@ -176,7 +175,32 @@ private struct DeckStrip: View {
         String(format: "%+.1f%%", deck.pitchPercent)
     }
 
-    /// Senza analisi del tempo il BPM non c'è ancora: meglio un trattino che un numero inventato.
+    /// Il display del BPM è anche il modo di aprire l'editor della griglia: è il numero che si
+    /// guarda quando si sospetta che la griglia non torni, quindi è lì che si va a cercare il
+    /// posto per correggerla.
+    private var bpmButton: some View {
+        Button {
+            model.focus(deck.slot)
+            isGridEditorPresented = true
+        } label: {
+            Text(bpmLabel)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(deck.hasBeatgrid ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .disabled(deck.track == nil)
+        .help(deck.hasBeatgrid ? "BPM effettivo · clic per correggere la griglia" : "Nessuna griglia · clic per metterne una")
+        .popover(isPresented: $isGridEditorPresented, arrowEdge: .leading) {
+            BeatgridEditor(deck: deck)
+        }
+    }
+
+    /// **Il BPM effettivo, non quello della traccia**: con il fader a +4% è quello che si sente, ed
+    /// è il numero da confrontare con l'altro deck. Il tempo scritto in tabella si legge
+    /// nell'editor, che è dove serve.
+    ///
+    /// Senza analisi del tempo il BPM non c'è: meglio un trattino che un numero inventato.
     private var bpmLabel: String {
         guard let bpm = deck.effectiveBPM else { return "— BPM" }
         return String(format: "%.1f BPM", bpm)

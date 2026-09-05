@@ -63,7 +63,15 @@ public struct TrackRepository: Sendable {
     ///
     /// Un `save` della traccia intera cancellerebbe le correzioni fatte nell'ispettore mentre
     /// l'analisi girava: sono minuti, non millisecondi.
-    public func updatePeaks(trackID: String, filename: String?) async throws {
+    ///
+    /// Il tempo si scrive **solo se è stato rilevato**: su un pezzo che non ha una pulsazione
+    /// riconoscibile l'analisi torna senza BPM, e in quel caso una griglia messa a mano in
+    /// precedenza deve restare dov'è invece di essere azzerata.
+    public func updateAnalysis(
+        trackID: String,
+        peaksFilename: String?,
+        tempo: TempoEstimate?
+    ) async throws {
         try await database.writer.write { db in
             try db.execute(
                 sql: """
@@ -71,7 +79,29 @@ public struct TrackRepository: Sendable {
                     SET peaksFilename = ?, analysisState = ?, analysisError = NULL
                     WHERE id = ?
                     """,
-                arguments: [filename, AnalysisState.ready.rawValue, trackID]
+                arguments: [peaksFilename, AnalysisState.ready.rawValue, trackID]
+            )
+            guard let tempo else { return }
+            try db.execute(
+                sql: "UPDATE track SET bpm = ?, beatgridOffsetSeconds = ? WHERE id = ?",
+                arguments: [tempo.bpm, tempo.beatgridOffsetSeconds, trackID]
+            )
+        }
+    }
+
+    /// Scrive la griglia corretta a mano: BPM e primo downbeat, niente altro.
+    ///
+    /// `nil` cancella la griglia — è il modo di dire "questo pezzo non ha un tempo utile" senza
+    /// lasciare in tabella un numero inventato che il quantize prenderebbe per buono.
+    public func updateBeatgrid(
+        trackID: String,
+        bpm: Double?,
+        beatgridOffsetSeconds: Double?
+    ) async throws {
+        try await database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE track SET bpm = ?, beatgridOffsetSeconds = ? WHERE id = ?",
+                arguments: [bpm, beatgridOffsetSeconds, trackID]
             )
         }
     }

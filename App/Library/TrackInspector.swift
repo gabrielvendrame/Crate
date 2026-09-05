@@ -13,6 +13,7 @@ struct TrackInspector: View {
     @State private var title = ""
     @State private var artist = ""
     @State private var album = ""
+    @State private var bpm = ""
     @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
@@ -33,7 +34,27 @@ struct TrackInspector: View {
 
             Section("Dettagli") {
                 LabeledContent("Durata", value: Self.duration(track.durationSeconds))
-                LabeledContent("BPM", value: track.bpm.map { String(format: "%.1f", $0) } ?? "non ancora rilevato")
+                // Il BPM si corregge anche da qui, non solo dall'editor della griglia sul deck:
+                // capita di accorgersi che è sbagliato guardando la tabella, prima di aver
+                // caricato la traccia da qualche parte. Il downbeat invece si tocca solo sul
+                // deck, dove si vede la waveform sotto le battute.
+                LabeledContent("BPM") {
+                    HStack(spacing: 6) {
+                        // Dentro un `Form` la stringa di un `TextField` diventa un'etichetta a
+                        // sinistra del campo, non un segnaposto: qui accanto a "BPM" comparivano
+                        // due etichette. Il testo di suggerimento va passato come `prompt`.
+                        TextField("", text: $bpm, prompt: Text("non rilevato"))
+                            .labelsHidden()
+                            .help("Scrivi il tempo e premi Invio · vuoto toglie la griglia")
+                            .frame(width: 70)
+                            .monospacedDigit()
+                            .multilineTextAlignment(.trailing)
+                            .onSubmit { commitBPM() }
+                        Button("Rileva") { model.reanalyze(track) }
+                            .controlSize(.small)
+                            .disabled(model.isAnalyzing(track) || track.audioFilename == nil)
+                    }
+                }
                 LabeledContent("Audio", value: "\(Int(track.sampleRate)) Hz · \(track.channelCount) canali")
                 LabeledContent("Origine") {
                     Link("YouTube", destination: URL(string: track.youtubeURL) ?? URL(string: "https://youtube.com")!)
@@ -64,6 +85,24 @@ struct TrackInspector: View {
         title = track.title
         artist = track.artist
         album = track.album
+        bpm = track.bpm.map { String(format: "%.2f", $0) } ?? ""
+    }
+
+    /// Il campo vuoto toglie la griglia; un numero storto si rifiuta rimettendo quello di prima,
+    /// invece di scrivere in tabella qualcosa che il quantize prenderebbe per buono.
+    private func commitBPM() {
+        let trimmed = bpm.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            model.setBPM(nil, for: track)
+            return
+        }
+        guard let value = Double(trimmed.replacingOccurrences(of: ",", with: ".")),
+              DeckState.bpmRange.contains(value)
+        else {
+            bpm = track.bpm.map { String(format: "%.2f", $0) } ?? ""
+            return
+        }
+        model.setBPM(value, for: track)
     }
 
     /// Salvataggio ritardato: si scrive sul database quando la digitazione si ferma, non a ogni

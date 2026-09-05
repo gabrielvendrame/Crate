@@ -21,6 +21,9 @@ struct WaveformZoomView: NSViewRepresentable {
     let visibleSeconds: Double
     /// Hot cue, memory cue e cue di lavoro, disegnati come marker dentro lo shader.
     let markers: [CueMarker]
+    /// La griglia delle battute, disegnata anch'essa dallo shader: deve restare inchiodata alla
+    /// waveform mentre scorre, e un overlay SwiftUI a 20 Hz striscerebbe visibilmente.
+    let beatgrid: Beatgrid?
     /// Il deck sta suonando: la vista si disegna da sé.
     let isRunning: Bool
     /// Sonda della posizione letta a ogni frame, leggibile da qualsiasi thread. `nil` quando non
@@ -52,6 +55,7 @@ struct WaveformZoomView: NSViewRepresentable {
             playheadSeconds: playheadSeconds,
             visibleSeconds: visibleSeconds,
             markers: markers,
+            beatgrid: beatgrid,
             livePosition: livePosition
         )
         context.coordinator.setRunning(isRunning)

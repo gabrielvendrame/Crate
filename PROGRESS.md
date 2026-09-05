@@ -106,22 +106,37 @@ Legenda: `[ ] todo` · `[~] in-progress` · `[x] done` · `[!] bloccato`
 - [x] `done` — Eliminazione righe: tasto ⌫ sulla selezione e menu contestuale
 - [x] `done` — Test: due nuovi sull'inserimento in mezzo e sull'ordine di un drop multiplo, oltre ai sei della M1 — **102 test su 102 verdi**
 
-## M6 — BPM e beatgrid · **todo** ← prossima
+## M6 — BPM e beatgrid · **done**
 
 *Esito atteso: ogni traccia ha un BPM corretto e una griglia allineata.*
 
-- [ ] `todo` — `Analysis/TempoAnalyzer.swift`: spectral flux multi-banda, autocorrelazione FFT, interpolazione parabolica del picco
-- [ ] `todo` — Rilevamento della fase del downbeat → `beatgridOffsetSeconds`
-- [ ] `todo` — Test su click track sintetici a 120/128/174 BPM, tolleranza ±0.5
-- [ ] `todo` — Overlay della griglia sulla waveform zoomata
-- [ ] `todo` — Editing manuale: campo BPM, trascinamento della griglia, tap-tempo
-- [ ] `todo` — Display del BPM effettivo in funzione della posizione del pitch
-- [ ] `todo` — **Quantize** — chiesto da Gabriel il 2026-09-04. Senza loop, l'unica cosa da
-  quantizzare sono i cue: con il quantize attivo, memorizzare un hot cue o spostare il cue di
-  lavoro **aggancia il punto alla battuta più vicina** della griglia invece di prenderlo dove
-  cade il dito. Serve la beatgrid, quindi sta qui e non in M4. Da decidere: risoluzione (1 battuta
-  o 1/2) e se il quantize valga anche al salto — sui CDJ sì, e per un salto a tempo con l'altro
-  deck è il caso che conta
+- [x] `done` — `Analysis/TempoAnalyzer.swift` + `TempoEstimate`: spectral flux multi-banda (9 bande per ottave, ampiezze compresse in log), autocorrelazione via FFT, somma armonica con preferenza attorno a 126 BPM, interpolazione parabolica del picco, **raffinatura su ritardo lungo** che porta l'errore sotto 0,05 BPM
+- [x] `done` — `TempoAnalyzer.resolveOctave`: guarda **in mezzo** alle battute trovate e dimezza il periodo se anche lì ci sono colpi. Senza, un 174 con la cassa sull'uno veniva letto 87 — l'autocorrelazione preferisce sistematicamente il periodo lungo
+- [x] `done` — Fase per treno di impulsi + scelta dell'uno della misura sulle bande basse → `beatgridOffsetSeconds`
+- [x] `done` — `Model/Beatgrid.swift` + `QuantizeResolution`: griglia a BPM costante, aggancio, trascinamento con rientro nella prima misura
+- [x] `done` — Analisi e repository: `TrackAnalyzer` calcola il tempo nella stessa passata dei peaks, `TrackRepository.updateAnalysis` e `updateBeatgrid`, `Track.beatgrid`
+- [x] `done` — Test: `TempoAnalyzer` su click track sintetici 120/128/174 con tolleranza ±0.5 (7), `Beatgrid` (10), quantize del cue in `DeckEngine` (6) — **125 test su 125 verdi**
+- [x] `done` — Overlay della griglia nella vista zoomata: shader Metal, **corsia dedicata in cima**
+  (14 px del drawable) con trattini di battuta e trattini di misura più alti, più una linea di
+  misura tenue dentro la waveform. Le linee spariscono da sole quando lo zoom le impasta
+- [x] `done` — Editing manuale: `BeatgridEditor` in popover dal display del BPM del deck — campo
+  BPM, ×2/÷2, tap-tempo (dal quarto colpo, media sugli ultimi otto), «primo 1 qui», frecce da
+  1 ms (10 ms con ⇧), «rileva di nuovo», «togli la griglia». **⌥ e trascina** sposta la griglia
+  sulla waveform. Campo BPM anche nell'ispettore della libreria, con pulsante «Rileva»
+- [x] `done` — Display del BPM effettivo col pitch: c'era già da M4, ora ha un numero da mostrare;
+  il display è diventato il pulsante che apre l'editor della griglia
+- [x] `done` — **Quantize** — chiesto da Gabriel il 2026-09-04. Interruttore + risoluzione 1/1 e
+  1/2 nel mixer (e nel menu **Deck**, ⌥⌘Q), impostazione unica per entrambi i deck e ricordata fra
+  un avvio e l'altro. Aggancia il punto **memorizzando** un hot cue, **spostando il cue di lavoro**
+  e **saltando** a un hot cue; non tocca scrub e seek. Le decisioni lasciate aperte sono scritte in
+  `CLAUDE.md`
+- [x] `done` — `swift test`: **125 test su 125 verdi** · `xcodebuild`: **BUILD SUCCEEDED**
+- [x] `done` — **Verificato sulla libreria vera, pilotando l'app**: analizzate le 5 tracce
+  (125,00 · 117,74 · 126,96 · 119,89 · 124,00 BPM). Misurato in modo indipendente dallo spectral
+  flux — inviluppo di energia contro griglia — che **le battute cadono entro 2–8 ms dagli attacchi
+  di cassa** su tutte e cinque, con scarto interquartile 2–8 ms. Provati dall'interfaccia: hot cue
+  agganciato (battuta 512,000 esatta), hot cue non agganciato a quantize spento (530,103), ÷2 e ×2,
+  ⌥+trascinamento della griglia (0,712 → 1,031 s per 40 punti a zoom 8 s), scrittura ritardata
 
 ## M7 — Rifiniture · **todo**
 
@@ -158,7 +173,7 @@ Chiesti da Gabriel il **2026-09-04**, usando l'app:
 
 ## Ripartenza a freddo
 
-**Stato:** da M0 a M5 chiuse. **Il motore audio c'è e suona, e le scalette si costruiscono.** L'import da
+**Stato:** da M0 a M6 chiuse. **Il motore audio c'è e suona, e le scalette si costruiscono.** L'import da
 YouTube funziona end-to-end ed è stato **provato da Gabriel dall'interfaccia**. L'analisi calcola i
 peaks a fine import e le due waveform si disegnano su entrambi i deck, colorate per bande.
 Caricando una traccia su un deck l'audio viene decodificato in RAM e il tasto play la fa suonare;
@@ -169,11 +184,18 @@ entrambe le waveform** — bandierine numerate nell'overview, linee colorate nel
 La nota di un hot cue si scrive col clic destro sul pad e si legge passando il puntatore sul pad.
 **I memory cue sono fuori scope**: bastano gli otto hot cue. Ci sono anche fader di pitch
 verticale, crossfader, gain per deck e i due tasti di nudge, quindi **M4 è chiusa**: due tracce si
-possono suonare insieme e mettere in fase. Il BPM mostra `— BPM` perché l'analisi del tempo
-arriva in M6.
+possono suonare insieme e mettere in fase.
 
 L'editor delle scalette è completo e **provato pilotando l'app**: riordino trascinando, brani
 aggiunti lasciandoli sulla scaletta nella barra laterale, note scritte sul posto.
+
+**Ogni traccia ha BPM e beatgrid.** Il tempo si calcola nella stessa passata dei peaks, la griglia
+si disegna in una corsia in cima alla vista zoomata, e il display del BPM del deck apre l'editor
+per correggerla — campo BPM, ×2/÷2, tap-tempo, «primo 1 qui», frecce fini; sulla waveform, ⌥ e
+trascina. **Il quantize è acceso di default**, a 1/1, e aggancia i cue alla battuta. Sulle cinque
+tracce vere in libreria la griglia sta entro 2–8 ms dagli attacchi di cassa per tutta la durata.
+Il limite noto è l'**ottava**: 87 con i charleston in levare contro 174 con la cassa su ogni
+quarto è ambiguo anche a orecchio, e si raddrizza con ÷2 o ×2.
 
 **Il suono è stato sentito da Gabriel** («funziona»), quindi il motore è verificato all'orecchio e
 non solo in rendering offline. Restano da ascoltare con attenzione: che scrub e seek non producano
@@ -182,7 +204,7 @@ schiocchi, e che l'anteprima del CUE tenuto premuto attacchi e stacchi pulita.
 ```bash
 cd /Users/gabriel/Desktop/youtube-playlist-creator-dj
 ./Scripts/fetch-tools.sh                       # solo se Resources/Tools/ è vuota
-swift test --package-path DJKit                # 102 test, ~0,35 s
+swift test --package-path DJKit                # 125 test, ~1 s
 xcodegen generate && xcodebuild -project Crate.xcodeproj -scheme Crate build
 ```
 
@@ -229,28 +251,68 @@ open ~/Library/Developer/Xcode/DerivedData/Crate-ccwemjglglgepydupulkiluzdkvq/Bu
 "FrescoEdits - Jom", 5:45, m4a AAC 129k, 44,1 kHz stereo. Il link originale portava dietro
 `&list=RDjLEvbgq2oEQ&index=7`, ed è il caso su cui è costruito il test del `--no-playlist`.
 
-**Le due tracce già in libreria sono state importate prima di M3**, quindi non hanno il file
-`.peaks`: in tabella appaiono come "Senza waveform". Si sistemano dal menu **Deck → Calcola le
-waveform mancanti**, oppure una alla volta con ⌥⌘R.
+**Le cinque tracce in libreria sono analizzate**, waveform e BPM compresi: le mancanze si
+recuperano dal menu **Deck → Analizza le tracce mancanti**, o una alla volta con ⌥⌘R. Waveform e
+tempo escono dalla stessa passata, perché condividono la decodifica, che è la parte cara.
 
-**Il progetto è sotto git** (branch `main`, nessun remote), con due commit: l'impianto con
-l'import da YouTube, e *«Waveform, deck audio con CUE e hot cue, editor delle scalette»* che
-chiude M3, M4 e M5. Albero di lavoro pulito.
+**Il progetto è sotto git** (branch `main`, nessun remote), con tre commit: l'impianto con
+l'import da YouTube, *«Waveform, deck audio con CUE e hot cue, editor delle scalette»* che chiude
+M3, M4 e M5, e la ripartenza a freddo aggiornata.
 
-## Prossimo passo — resto di M4
+## Prossimo passo — M7
 
-1. **M4 e M5 sono chiuse**: la prossima è **M6 — BPM e beatgrid**, e il pezzo grosso è
-   `Analysis/TempoAnalyzer.swift` (spectral flux multi-banda, autocorrelazione FFT,
-   interpolazione parabolica del picco, poi la fase del downbeat). Si verifica su click track
-   sintetici a 120/128/174 BPM con tolleranza ±0,5 — **non** su musica vera, che renderebbe i
-   test non riproducibili. Il display del BPM effettivo nella fascia del deck è già pronto e
-   aspetta solo che `track.bpm` smetta di essere `nil`. In coda a M6 c'è anche il **quantize**,
-   che senza loop riguarda solo i cue.
+1. **Da far provare a Gabriel**, che è la cosa che qui non si può automatizzare: se i BPM rilevati
+   sulle sue tracce sono quelli giusti e non un'ottava sopra o sotto, e se il quantize a 1/1 gli
+   basta o vuole 1/2 come predefinito. La griglia è verificata **numericamente** contro gli
+   attacchi di cassa, ma se un pezzo ha il tempo che va e viene lo si sente, non si misura.
 2. **Scorciatoie da tastiera** (M7): `DeckKeyMonitor` è il posto dove aggiungerle. Il CUE da
    tastiera ha bisogno di `keyDown` **e** `keyUp` per il press-and-hold, che `keyboardShortcut`
    non sa dare — il monitor invece sì, basta aggiungere la maschera `.keyUp`.
+3. Il resto di M7 sta nell'elenco sopra: ricerca nella libreria, aggiornamento di yt-dlp, stati
+   vuoti, e la verifica con Instruments che nel render callback non ci siano allocazioni.
 
 ## Note di implementazione
+
+### Da M6
+
+- **L'autocorrelazione preferisce sistematicamente il periodo lungo, e la somma armonica non lo
+  corregge.** Il conto è questo: per un pezzo con la cassa forte sull'uno e colpi più leggeri sugli
+  altri quarti, l'autocorrelazione a due quarti di distanza è **più alta** che a un quarto, perché
+  il colpo forte ricade sul colpo forte. Sommare i multipli non aiuta — sia il periodo giusto sia
+  il suo doppio raccolgono quattro picchi — e la differenza che resta, dovuta al decadimento della
+  stima polarizzata, vale il 2%. Un 174 usciva 87. Quello che scioglie il dubbio è una domanda
+  diversa: **fra una battuta e l'altra c'è un colpo?** Se c'è, quella è una battuta anche lei.
+  `TempoAnalyzer.resolveOctave`, sei righe, e il test sul click track a 174 passa.
+- **La precisione sul BPM viene da un ritardo lungo, non da una parabola più furba.** Il picco a
+  trenta periodi di distanza si trova con lo stesso mezzo frame di incertezza, ma diviso per trenta
+  vale un trentesimo. Serve davvero: 0,1 BPM di errore su un brano di sei minuti sono un quarto di
+  secondo di scarto in fondo. La raffinatura si applica solo se il picco lungo cade dove il periodo
+  grossolano lo prevedeva (entro il 2%), altrimenti il pezzo non ha un tempo abbastanza fisso e si
+  tiene la misura corta.
+- **La griglia disegnata sopra la waveform sparisce proprio quando è giusta.** I trattini cadono
+  sull'attacco della cassa, che è dipinto quasi bianco e alto quanto tutta la vista, e ci finiscono
+  dentro: la griglia si vedeva solo sopra il silenzio. Ci si arriva solo guardando l'app su un
+  brano vero — a schermo sembrava che la griglia non venisse disegnata affatto. Rimedio: una
+  **corsia dedicata in cima** (`kGridLaneHeight`), con la forma d'onda che si stringe sotto, più
+  una linea di misura tenue dentro la waveform. Le bandierine dei cue sono state fatte scendere
+  sotto la corsia, o le si sovrapporrebbero.
+- **Il trascinamento della griglia scrive in ritardo.** ⌥+trascina manda decine di aggiornamenti al
+  secondo: una transazione per ciascuno vorrebbe dire centinaia di scritture su SQLite per un gesto
+  solo, e ogni scrittura fa ripartire l'osservazione della libreria. `DeckState` aggiorna subito la
+  copia in memoria e salva 250 ms dopo l'ultimo movimento. Cambiando traccia il task **non si
+  annulla**: ha già in mano l'identificativo giusto e la scrittura arriva a destinazione.
+- **I deck tenevano una copia vecchia della traccia.** `DeckState.track` è una `struct` copiata al
+  caricamento: correggendo un BPM dall'ispettore, il deck continuava a quantizzare su quello
+  vecchio. `AppModel` ora chiama `refreshTrack(from:)` sull'osservazione della libreria — cosa che
+  sistema anche i metadati corretti a traccia caricata, che restavano indietro da M2.
+- **Dentro un `Form`, la stringa di un `TextField` diventa un'etichetta, non un segnaposto.** Nel
+  campo BPM dell'ispettore comparivano due etichette accanto: "BPM" e "non rilevato". Il testo di
+  suggerimento va passato come `prompt`, con `.labelsHidden()`.
+- **Il modo giusto di verificare la griglia non è guardarla.** Leggere i pixel di uno screenshot
+  porta a scambiare i picchi della forma d'onda per linee di griglia — è successo, e la conclusione
+  era sbagliata di un terzo di battuta. La misura che decide è indipendente: inviluppo di energia
+  del file audio, attacchi sopra metà del picco, distanza dalla battuta più vicina. Su cinque brani
+  veri: mediana da +2,5 a +13 ms, scarto interquartile 2–8 ms.
 
 ### Da M5
 

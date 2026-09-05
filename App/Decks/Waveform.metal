@@ -32,6 +32,10 @@ struct WaveformUniforms {
     float amplitudeScale;
     uint binCount;
     uint markerCount;
+    /// Durata di una battuta, in bin. Zero quando la traccia non ha ancora una griglia.
+    float beatBins;
+    /// Posizione del primo downbeat, in bin.
+    float gridOffsetBins;
 };
 
 /// Un marker di cue: `.x` è la posizione in bin, `.yzw` il colore.
@@ -88,12 +92,57 @@ float3 bandColor(float low, float mid, float high) {
 constant float kMarkerFlagHeight = 12.0;
 constant float kMarkerFlagHalfWidth = 4.5;
 
+// La griglia ha **una corsia sua in cima**, e la forma d'onda si stringe sotto per farle posto.
+//
+// La prima versione disegnava i trattini sopra la waveform, ed è stata provata su un brano vero:
+// quando la griglia è giusta i trattini cadono esattamente sull'attacco della cassa, che è dipinto
+// quasi bianco e alto quanto tutta la vista — e ci spariscono dentro. Il risultato era una griglia
+// che si vedeva solo dove non serviva, sopra il silenzio, e diventava invisibile proprio nei
+// passaggi pieni dove si va a controllare se il pezzo è a tempo.
+//
+// Nella corsia lo sfondo è sempre scuro, quindi i trattini si leggono sempre. Sopra la waveform
+// resta una linea di misura tenue, che serve a seguire l'occhio senza coprire niente.
+constant float3 kBarLineColor = float3(1.0, 1.0, 1.0);
+constant float3 kBeatLineColor = float3(0.72, 0.75, 0.82);
+constant float3 kGridLaneBackground = float3(0.12, 0.12, 0.15);
+/// Altezza della corsia, in pixel del drawable: su uno schermo Retina sono 7 punti.
+constant float kGridLaneHeight = 14.0;
+/// Quanto della corsia occupa un trattino di battuta, misurato dal basso: l'uno della misura la
+/// riempie tutta, gli altri quarti no, ed è così che si distinguono a colpo d'occhio.
+constant float kBeatTickFraction = 0.55;
+/// Opacità della linea di misura che continua sotto, dentro la waveform.
+constant float kBarGuideOpacity = 0.22;
+/// Sotto questa distanza in pixel due linee si impastano e la griglia diventa una campitura: le
+/// battute spariscono per prime, poi le misure. È lo stesso comportamento della griglia di
+/// rekordbox quando si allarga la vista.
+constant float kMinimumLineSpacing = 5.0;
+
+/// Distanza in pixel dalla linea di griglia più vicina, e a che battuta appartiene.
+struct GridHit {
+    float distance;
+    int beat;
+};
+
+GridHit nearestGridLine(float pixelBin, float beatBins, float binsPerPixel) {
+    float beat = pixelBin / beatBins;
+    float nearest = round(beat);
+    GridHit hit;
+    hit.distance = fabs(beat - nearest) * beatBins / binsPerPixel;
+    hit.beat = int(nearest);
+    return hit;
+}
+
 fragment float4 waveformFragment(VertexOut in [[stage_in]],
                                  const device WaveformBin *bins [[buffer(0)]],
                                  constant WaveformUniforms &uniforms [[buffer(1)]],
                                  const device WaveformMarker *markers [[buffer(2)]]) {
     float columnStart = uniforms.startBin + in.uv.x * uniforms.pixelWidth * uniforms.binsPerPixel;
     float columnEnd = columnStart + uniforms.binsPerPixel;
+
+    // Senza griglia non c'è corsia e la forma d'onda si prende tutta l'altezza, come prima.
+    float laneHeight = (uniforms.beatBins > 0.0) ? kGridLaneHeight : 0.0;
+    float waveHeight = max(uniforms.pixelHeight - laneHeight, 1.0);
+    float waveCenter = laneHeight + waveHeight * 0.5;
 
     int first = int(floor(columnStart));
     int last = max(first, int(ceil(columnEnd)) - 1);
@@ -125,7 +174,9 @@ fragment float4 waveformFragment(VertexOut in [[stage_in]],
     float3 color = kBackground;
 
     if (covered) {
-        float y = 1.0 - in.uv.y * 2.0;
+        // Coordinata verticale della forma d'onda: +1 in cima, −1 in fondo, dentro la sola parte
+        // che le resta sotto la corsia della griglia.
+        float y = (waveCenter - in.uv.y * uniforms.pixelHeight) / (waveHeight * 0.5);
         float aa = max(fwidth(y), 1e-4);
         float top = max(maximum * uniforms.amplitudeScale, aa);
         float bottom = min(minimum * uniforms.amplitudeScale, -aa);
@@ -137,22 +188,54 @@ fragment float4 waveformFragment(VertexOut in [[stage_in]],
         color = mix(color, kCenterLine, center * (1.0 - inside));
     }
 
+    float pixelX = in.uv.x * uniforms.pixelWidth;
+    float pixelY = in.uv.y * uniforms.pixelHeight;
+    float binsPerPixel = max(uniforms.binsPerPixel, 1e-6);
+
+    // La corsia della griglia, e la linea di misura che prosegue tenue sotto.
+    if (uniforms.beatBins > 0.0) {
+        if (pixelY < laneHeight) {
+            color = kGridLaneBackground;
+        }
+
+        float beatSpacing = uniforms.beatBins / binsPerPixel;
+        float barSpacing = beatSpacing * 4.0;
+        float pixelBin = columnStart - uniforms.gridOffsetBins;
+        GridHit hit = nearestGridLine(pixelBin, uniforms.beatBins, binsPerPixel);
+        // Il resto va preso positivo: prima del primo downbeat gli indici di battuta sono
+        // negativi, e in C il resto di un negativo è negativo.
+        int inBar = ((hit.beat % 4) + 4) % 4;
+        bool isBar = inBar == 0;
+
+        bool visible = isBar ? (barSpacing >= kMinimumLineSpacing)
+                             : (beatSpacing >= kMinimumLineSpacing);
+        if (visible) {
+            float line = 1.0 - smoothstep(0.5, 1.5, hit.distance);
+
+            if (pixelY < laneHeight) {
+                float top = isBar ? 0.0 : laneHeight * (1.0 - kBeatTickFraction);
+                float inside = pixelY >= top ? 1.0 : 0.0;
+                float3 tint = isBar ? kBarLineColor : kBeatLineColor;
+                color = mix(color, tint, line * inside);
+            } else if (isBar) {
+                color = mix(color, kBarLineColor, line * kBarGuideOpacity);
+            }
+        }
+    }
+
     // I marker passano sopra la waveform, per tutta l'altezza. La testina invece è un overlay
     // SwiftUI e finisce comunque sopra a questi.
     //
     // Si disegnano nell'ordine in cui arrivano, quindi l'ultimo vince dove due si sovrappongono:
     // il cue di lavoro sta in fondo alla lista proprio per questo.
-    float pixelX = in.uv.x * uniforms.pixelWidth;
-    float pixelY = in.uv.y * uniforms.pixelHeight;
-    float binsPerPixel = max(uniforms.binsPerPixel, 1e-6);
-
     for (uint index = 0; index < uniforms.markerCount; ++index) {
         float4 marker = markers[index].binAndColor;
         float markerX = (marker.x - uniforms.startBin) / binsPerPixel;
         float distance = fabs(pixelX - markerX);
 
         float line = 1.0 - smoothstep(1.0, 2.0, distance);
-        float flag = (pixelY < kMarkerFlagHeight)
+        // La bandierina scende sotto la corsia della griglia, altrimenti le si sovrapporrebbe.
+        float flag = (pixelY >= laneHeight && pixelY < laneHeight + kMarkerFlagHeight)
             ? 1.0 - smoothstep(kMarkerFlagHalfWidth, kMarkerFlagHalfWidth + 1.0, distance)
             : 0.0;
         color = mix(color, marker.yzw, max(line, flag));

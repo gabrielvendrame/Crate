@@ -30,6 +30,8 @@ final class WaveformRenderer: NSObject, MTKViewDelegate {
         var amplitudeScale: Float
         var binCount: UInt32
         var markerCount: UInt32
+        var beatBins: Float
+        var gridOffsetBins: Float
     }
 
     /// Quanti marker si caricano al massimo. I memory cue sono illimitati per progetto, ma su una
@@ -63,6 +65,9 @@ final class WaveformRenderer: NSObject, MTKViewDelegate {
     /// aggiornamento di SwiftUI, quindi lo scorrimento resta fluido anche a 60 fps.
     private var livePosition: (@Sendable () -> Double)?
     private var markers: [CueMarker] = []
+    /// La griglia della traccia caricata. `nil` finché il tempo non è stato rilevato: lo shader
+    /// riceve `beatBins` a zero e non disegna niente.
+    private var beatgrid: Beatgrid?
 
     private var binBuffer: MTLBuffer?
     private var uploadedKey: String?
@@ -103,6 +108,7 @@ final class WaveformRenderer: NSObject, MTKViewDelegate {
         playheadSeconds: Double,
         visibleSeconds: Double,
         markers: [CueMarker] = [],
+        beatgrid: Beatgrid? = nil,
         livePosition: (@Sendable () -> Double)? = nil
     ) {
         if trackID != self.trackID || peaks == nil {
@@ -115,6 +121,7 @@ final class WaveformRenderer: NSObject, MTKViewDelegate {
         self.playheadSeconds = playheadSeconds
         self.visibleSeconds = visibleSeconds
         self.markers = markers
+        self.beatgrid = beatgrid
         self.livePosition = livePosition
     }
 
@@ -194,6 +201,12 @@ final class WaveformRenderer: NSObject, MTKViewDelegate {
 
         prepareMarkers(sampleRate: peaks.sampleRate, binSize: level.binSize)
 
+        // La griglia va allo shader in bin, come tutto il resto: convertirla qui una volta per
+        // disegno costa due divisioni, farlo là dentro costerebbe per ogni pixel.
+        let binsPerSecond = peaks.sampleRate / Double(level.binSize)
+        let beatBins = beatgrid.map { $0.beatDuration * binsPerSecond } ?? 0
+        let gridOffsetBins = beatgrid.map { $0.offsetSeconds * binsPerSecond } ?? 0
+
         return Uniforms(
             startBin: Float(startBin),
             binsPerPixel: Float(binsPerPixel),
@@ -201,7 +214,9 @@ final class WaveformRenderer: NSObject, MTKViewDelegate {
             pixelHeight: Float(drawableSize.height),
             amplitudeScale: Float(WaveformPalette.amplitudeScale),
             binCount: UInt32(uploadedBinCount),
-            markerCount: UInt32(uploadedMarkerCount)
+            markerCount: UInt32(uploadedMarkerCount),
+            beatBins: Float(beatBins),
+            gridOffsetBins: Float(gridOffsetBins)
         )
     }
 

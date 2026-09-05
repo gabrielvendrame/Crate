@@ -453,6 +453,76 @@ struct DeckEngineTests {
         #expect(deck.isPreviewingCue == false)
     }
 
+    // MARK: - Quantize
+
+    @Test("Con il quantize attivo il cue si aggancia alla battuta più vicina")
+    func cueSnapsToTheGrid() {
+        let deck = DeckEngine(format: format())
+        deck.load(constant(0.5, frames: 44_100 * 4))
+        // 120 BPM: battute ogni mezzo secondo a partire da 0,1.
+        deck.quantizeGrid = Beatgrid(bpm: 120, offsetSeconds: 0.1)
+
+        deck.seek(toSeconds: 1.18)
+        deck.pressCue()
+        #expect(abs(deck.cueSeconds - 1.1) < 1e-6)
+
+        deck.seek(toSeconds: 1.45)
+        deck.pressCue()
+        #expect(abs(deck.cueSeconds - 1.6) < 1e-6)
+    }
+
+    @Test("A mezza battuta l'aggancio è più fine")
+    func cueSnapsToHalfBeat() {
+        let deck = DeckEngine(format: format())
+        deck.load(constant(0.5, frames: 44_100 * 4))
+        deck.quantizeGrid = Beatgrid(bpm: 120, offsetSeconds: 0.1)
+        deck.quantizeResolution = .halfBeat
+
+        deck.seek(toSeconds: 1.4)
+        deck.pressCue()
+        #expect(abs(deck.cueSeconds - 1.35) < 1e-6)
+    }
+
+    @Test("Senza griglia il cue resta dove è la testina")
+    func cueWithoutGridIsNotSnapped() {
+        let deck = DeckEngine(format: format())
+        deck.load(constant(0.5, frames: 44_100 * 4))
+        deck.quantizeGrid = nil
+
+        deck.seek(toSeconds: 1.18)
+        deck.pressCue()
+        #expect(abs(deck.cueSeconds - 1.18) < 1e-6)
+    }
+
+    @Test("Il quantize non tocca lo scrub: seek va dove va il dito")
+    func seekIsNeverQuantized() {
+        let deck = DeckEngine(format: format())
+        deck.load(constant(0.5, frames: 44_100 * 4))
+        deck.quantizeGrid = Beatgrid(bpm: 120, offsetSeconds: 0.1)
+
+        deck.seek(toSeconds: 1.18)
+        #expect(abs(deck.positionSeconds - 1.18) < 1e-4)
+    }
+
+    @Test("L'aggancio non porta un punto fuori dalla traccia")
+    func quantizeStaysInsideTheTrack() {
+        let deck = DeckEngine(format: format())
+        deck.load(constant(0.5, frames: 44_100))
+        deck.quantizeGrid = Beatgrid(bpm: 120, offsetSeconds: 0.1)
+
+        #expect(deck.quantized(0.99) <= deck.durationSeconds)
+        #expect(deck.quantized(0) >= 0)
+    }
+
+    @Test("Svuotare il deck spegne anche il quantize")
+    func unloadClearsTheGrid() {
+        let deck = DeckEngine(format: format())
+        deck.load(constant(0.5, frames: 44_100))
+        deck.quantizeGrid = Beatgrid(bpm: 120, offsetSeconds: 0.1)
+        deck.unload()
+        #expect(deck.quantizeGrid == nil)
+    }
+
     @Test("Senza traccia il CUE non fa niente")
     func cueOnEmptyDeck() {
         let deck = DeckEngine(format: format())

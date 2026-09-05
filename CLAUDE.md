@@ -36,6 +36,14 @@ Queste sono esclusioni volute. Non aggiungerle "perché sarebbe utile".
 - **Solo quattro campi di metadati**: titolo, artista, album — più le foto dell'etichetta. Niente
   genere, anno, rating, commenti, energy.
 - **Beatgrid a BPM costante** (offset del downbeat + BPM). Niente beatgrid a marker multipli.
+- **Quantize: solo i cue, e uno solo per tutta l'app.** Senza loop non c'è altro da
+  quantizzare. Risoluzione **1/1 o 1/2** (scelta di Gabriel del 2026-09-05, dal picker nel mixer;
+  sotto la mezza battuta non serve, un sedicesimo a 128 BPM sono 117 ms). L'aggancio vale per
+  **memorizzare** un hot cue, per **spostare il cue di lavoro** e anche per **saltare** a un hot
+  cue — così un punto piazzato a mano prima che ci fosse la griglia atterra comunque in battuta.
+  Non è invece un'azione *ritardata* alla battuta successiva come su alcuni lettori: il salto
+  avviene subito, sul punto agganciato. Farlo aspettare vorrebbe dire programmare un evento dentro
+  il thread audio, e senza loop non ripaga.
 - **Niente memory cue.** Solo gli **8 hot cue**, ognuno con nome e nota. Deciso da Gabriel il
   2026-09-04 usando l'app, e **sostituisce il punto 2 di `PLAN.md`** che prevedeva anche memory
   cue illimitati. La colonna `hotcueSlot` resta annullabile — è così che `assignHotCue` libera uno
@@ -92,6 +100,30 @@ l'isolamento e il compilatore le mette in testa un controllo di esecutore che su
 `SIGTRAP` al primo buffer. Va costruito in un metodo `nonisolated` con la closure `@Sendable`
 (`DeckEngine.makeRenderBlock`). Non è un errore di compilazione né un avviso: si manifesta solo
 premendo play.
+
+**Il rilevamento del tempo sbaglia l'ottava, e si corregge guardando in mezzo alle battute.**
+`TempoAnalyzer` misura il periodo per autocorrelazione della curva di onset, con somma armonica:
+il metodo preferisce **sistematicamente il periodo lungo**, perché un pezzo con la cassa forte
+sull'uno si autocorrela meglio a due quarti di distanza che a uno. Un 174 veniva letto 87. Il
+rimedio non è pesare diversamente i multipli — non discriminano — ma chiedersi se **fra una
+battuta e l'altra c'è un colpo**: se c'è, quella è una battuta anche lei (`resolveOctave`). Resta
+ambiguo il caso opposto, 87 con i charleston in levare contro 174 con la cassa su ogni quarto, che
+è ambiguo anche a orecchio: lì decide una preferenza morbida attorno ai 126 BPM, e se sbaglia ci
+sono ×2 e ÷2 nell'editor.
+
+La precisione sul BPM viene invece da una **seconda misura su un ritardo lungo**: individuato il
+picco a una trentina di periodi di distanza e diviso per trenta, lo stesso mezzo frame di errore
+pesa trenta volte meno. Senza, 0,1 BPM di scarto diventano un quarto di secondo in fondo a un
+brano di sei minuti. Misurato su cinque brani veri della libreria: le battute della griglia cadono
+entro 2–8 ms dagli attacchi di cassa, per tutta la durata.
+
+**La griglia si disegna in una corsia sua, in cima alla vista zoomata.** Disegnarla sopra la
+waveform sembrava ovvio e non funziona: quando la griglia è **giusta** i trattini cadono
+esattamente sull'attacco della cassa, che è dipinto quasi bianco e alto quanto tutta la vista, e ci
+spariscono dentro — la griglia si vedeva solo sopra il silenzio. Con la corsia lo sfondo sotto i
+trattini è sempre scuro; sopra la waveform resta solo una linea di misura tenue. `kGridLaneHeight`
+in `Waveform.metal` toglie quei pixel all'altezza della forma d'onda, e senza griglia la corsia non
+c'è.
 
 **Persistenza: GRDB 7 (SQLite), non SwiftData.** Migrazioni esplicite e leggibili, e controllo
 totale sulla colonna `position` che ordina le playlist — che è il punto dove SwiftData dà più

@@ -1,3 +1,4 @@
+import DJKit
 import SwiftUI
 
 /// Il mixer: un gain per deck e il crossfader, nella striscia **fra i due deck**, che è dove sta
@@ -32,11 +33,43 @@ struct MixerStrip: View {
             Spacer(minLength: 8)
 
             gain(for: model.deckB, label: "GAIN B")
+
+            Divider().frame(height: 16)
+
+            quantize
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    /// Il quantize sta qui, nella striscia in mezzo, perché **vale per entrambi i deck**: un
+    /// interruttore per deck sarebbe due volte la stessa impostazione a due centimetri di
+    /// distanza. Accanto, la risoluzione dell'aggancio.
+    private var quantize: some View {
+        @Bindable var model = model
+
+        return HStack(spacing: 6) {
+            Toggle(isOn: $model.isQuantizeEnabled) {
+                Text("QUANTIZE")
+                    .font(.caption2.weight(.semibold))
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help("I cue si agganciano alla battuta più vicina della griglia, invece di cadere dove capita")
+
+            Picker("", selection: $model.quantizeResolution) {
+                ForEach(QuantizeResolution.allCases, id: \.self) { resolution in
+                    Text(resolution.label).tag(resolution)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 78)
+            .disabled(!model.isQuantizeEnabled)
+            .help("Quanto è fine l'aggancio: alla battuta o alla mezza battuta")
+        }
     }
 
     private func gain(for deck: DeckState, label: String) -> some View {

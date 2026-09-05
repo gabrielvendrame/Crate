@@ -24,9 +24,14 @@ public final class DeckEngine {
     /// riesce a spingere un piatto col dito senza far sentire che è stato spinto.
     public static let bendRangePercent = 3.0
 
-    /// Di quanto sposta la testina un colpo di nudge. Dieci millisecondi si sentono come uno
-    /// scarto di fase e non come un salto; quando ci sarà la beatgrid, il passo naturale diventerà
-    /// una frazione di battuta.
+    /// Di quanto sposta la testina un colpo di nudge: dieci millisecondi, che si sentono come uno
+    /// scarto di fase e non come un salto.
+    ///
+    /// **Resta un tempo assoluto anche adesso che c'è la beatgrid**, e non una frazione di
+    /// battuta: il nudge serve a mettere in fase due dischi, cioè a recuperare uno scarto di
+    /// millisecondi che non ha niente a che vedere con il tempo del pezzo. Legarlo alla griglia lo
+    /// renderebbe anche più grosso sui pezzi lenti, che è l'opposto di quello che serve, e
+    /// smetterebbe di funzionare sulle tracce senza griglia.
     public static let nudgeSeconds = 0.01
 
     /// I nodi li collega `AudioGraph`: il deck non sa in che grafo è finito.
@@ -54,6 +59,15 @@ public final class DeckEngine {
     public private(set) var cueSeconds: Double = 0
     /// Sta suonando solo perché il tasto CUE è tenuto premuto.
     public private(set) var isPreviewingCue = false
+
+    /// Griglia a cui agganciare i cue. `nil` quando il quantize è spento o la traccia non ha una
+    /// griglia: in entrambi i casi il punto si prende dov'è la testina.
+    ///
+    /// Il quantize vive **qui** e non nella vista perché è il motore a possedere il cue di
+    /// lavoro: se lo spostamento del cue si agganciasse solo nell'interfaccia, il tasto CUE
+    /// premuto da tastiera aggirerebbe la griglia senza che si veda perché.
+    public var quantizeGrid: Beatgrid?
+    public var quantizeResolution: QuantizeResolution = .beat
 
     private var storedPitch: Double = 0
     private var storedBend: Double = 0
@@ -138,7 +152,19 @@ public final class DeckEngine {
         state.setSampleRate(0)
         isPreviewingCue = false
         cueSeconds = 0
+        quantizeGrid = nil
         publish(0, keeping: nil)
+    }
+
+    /// Aggancia un istante alla griglia, se il quantize è attivo, e lo tiene dentro la traccia.
+    ///
+    /// Non lo chiamano seek e scrub: quelli devono andare esattamente dove va il dito, altrimenti
+    /// trascinando la waveform la testina salterebbe di battuta in battuta. Il quantize riguarda
+    /// i **punti che si memorizzano e si richiamano**, non il movimento.
+    public func quantized(_ seconds: Double) -> Double {
+        guard let quantizeGrid, durationSeconds > 0 else { return seconds }
+        let snapped = quantizeGrid.snap(seconds, resolution: quantizeResolution)
+        return min(max(0, snapped), durationSeconds)
     }
 
     private func baseStep(forFileRate fileRate: Double) -> Double {
@@ -199,7 +225,8 @@ public final class DeckEngine {
     ///
     /// - **in play** → torna al cue e si ferma lì (*back cue*);
     /// - **in pausa sul cue** → suona finché il tasto resta premuto, e al rilascio torna indietro;
-    /// - **in pausa altrove** → il cue si sposta nella posizione corrente.
+    /// - **in pausa altrove** → il cue si sposta nella posizione corrente, agganciato alla
+    ///   griglia se il quantize è attivo.
     ///
     /// Il terzo caso è quello che sorprende chi non ci è abituato — mettere in pausa a metà pezzo
     /// e premere CUE *sposta* il cue — ma è il comportamento del CDJ, ed è quello per cui l'app
@@ -220,7 +247,7 @@ public final class DeckEngine {
             play()
             isPreviewingCue = isPlaying
         } else {
-            cueSeconds = min(max(0, positionSeconds), durationSeconds)
+            cueSeconds = quantized(min(max(0, positionSeconds), durationSeconds))
         }
     }
 

@@ -1,3 +1,4 @@
+import AppKit
 import DJKit
 import SwiftUI
 
@@ -22,6 +23,9 @@ struct DeckWaveforms: View {
     /// l'intero spostamento e la waveform schizzerebbe via.
     @State private var scrubAnchor: Double?
     @State private var zoomAnchor: Double?
+    /// Offset della griglia da cui è partito un trascinamento con ⌥, per lo stesso motivo per cui
+    /// serve `scrubAnchor`.
+    @State private var gridAnchor: Double?
 
     var body: some View {
         VStack(spacing: 4) {
@@ -53,6 +57,7 @@ struct DeckWaveforms: View {
                     playheadSeconds: deck.playheadSeconds,
                     visibleSeconds: deck.visibleSeconds,
                     markers: deck.cueMarkers,
+                    beatgrid: deck.beatgrid,
                     isRunning: deck.isPlaying,
                     livePosition: deck.livePositionProvider
                 )
@@ -102,17 +107,44 @@ struct DeckWaveforms: View {
 
     // MARK: - Gesti
 
+    /// Trascinare la waveform sposta la testina; **trascinarla con ⌥ sposta la griglia**.
+    ///
+    /// Lo stesso gesto con un modificatore, e non un pulsante «modalità griglia», perché è
+    /// un'azione di un secondo: si vede che le linee cadono mezza battuta più in là e si tirano
+    /// dove devono stare. Una modalità da accendere e spegnere costerebbe più clic dell'aggiustata.
+    ///
+    /// Il modificatore si legge da `NSEvent.modifierFlags` — `DragGesture` non riporta i tasti
+    /// premuti — e si guarda **una volta sola**, all'inizio del trascinamento: premere o lasciare
+    /// ⌥ a metà gesto non deve trasformarlo in qualcos'altro sotto il dito.
     private func scrubGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 1)
             .onChanged { value in
                 guard width > 0, deck.durationSeconds > 0 else { return }
                 model.focus(deck.slot)
-                let anchor = scrubAnchor ?? deck.playheadSeconds
-                if scrubAnchor == nil { scrubAnchor = anchor }
                 let secondsPerPoint = deck.visibleSeconds / Double(width)
-                deck.seek(toSeconds: anchor - Double(value.translation.width) * secondsPerPoint)
+                let translation = Double(value.translation.width) * secondsPerPoint
+
+                if scrubAnchor == nil && gridAnchor == nil {
+                    if NSEvent.modifierFlags.contains(.option), let grid = deck.beatgrid {
+                        gridAnchor = grid.offsetSeconds
+                    } else {
+                        scrubAnchor = deck.playheadSeconds
+                    }
+                }
+
+                if let gridAnchor, let grid = deck.beatgrid {
+                    // La griglia segue il dito: trascinando a destra le battute vanno avanti nel
+                    // tempo, al contrario dello scrub, dove è la traccia a scorrere sotto la
+                    // testina ferma.
+                    deck.setBeatgrid(grid.alignedDownbeat(toSeconds: gridAnchor + translation))
+                } else if let scrubAnchor {
+                    deck.seek(toSeconds: scrubAnchor - translation)
+                }
             }
-            .onEnded { _ in scrubAnchor = nil }
+            .onEnded { _ in
+                scrubAnchor = nil
+                gridAnchor = nil
+            }
     }
 
     private var zoomGesture: some Gesture {

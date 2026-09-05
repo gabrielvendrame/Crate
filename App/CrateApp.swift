@@ -1,8 +1,19 @@
+import DJKit
 import SwiftUI
 
 @main
 struct CrateApp: App {
     @State private var model = AppModel()
+
+    /// I comandi di menu non possono usare `@Bindable`, che vive dentro un `body` di vista: i
+    /// due binding si costruiscono a mano sul modello.
+    private var quantizeBinding: Binding<Bool> {
+        Binding(get: { model.isQuantizeEnabled }, set: { model.isQuantizeEnabled = $0 })
+    }
+
+    private var resolutionBinding: Binding<QuantizeResolution> {
+        Binding(get: { model.quantizeResolution }, set: { model.quantizeResolution = $0 })
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -37,16 +48,30 @@ struct CrateApp: App {
 
                 Divider()
 
-                Button("Ricalcola la waveform") {
+                // Waveform e BPM escono dalla stessa passata di analisi: due comandi separati
+                // vorrebbero dire decodificare due volte lo stesso file.
+                Button("Rianalizza la traccia") {
                     if let track = model.selectedTrack { model.reanalyze(track) }
                 }
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(model.selectedTrack?.audioFilename == nil)
 
-                Button("Calcola le waveform mancanti") {
-                    model.analyzeTracksWithoutWaveform()
+                Button("Analizza le tracce mancanti") {
+                    model.analyzeTracksWithoutAnalysis()
                 }
-                .disabled(model.tracksWithoutWaveform.isEmpty)
+                .disabled(model.tracksWithoutAnalysis.isEmpty)
+
+                Divider()
+
+                Toggle("Quantize", isOn: quantizeBinding)
+                    .keyboardShortcut("q", modifiers: [.command, .option])
+
+                Picker("Aggancio del quantize", selection: resolutionBinding) {
+                    ForEach(QuantizeResolution.allCases, id: \.self) { resolution in
+                        Text(resolution.label).tag(resolution)
+                    }
+                }
+                .disabled(!model.isQuantizeEnabled)
             }
         }
     }

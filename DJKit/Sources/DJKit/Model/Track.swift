@@ -74,6 +74,16 @@ public struct Track: Identifiable, Codable, Hashable, Sendable {
         self.addedAt = addedAt
     }
 
+    /// La griglia della traccia, se ne ha una. `nil` finché il tempo non è stato rilevato o
+    /// scritto a mano: è il segnale che il quantize non ha niente a cui agganciarsi.
+    ///
+    /// Un offset mancante vale zero — una traccia con il BPM ma senza downbeat è comunque
+    /// meglio di nessuna griglia, e il downbeat si trascina in un gesto.
+    public var beatgrid: Beatgrid? {
+        guard let bpm else { return nil }
+        return Beatgrid(bpm: bpm, offsetSeconds: beatgridOffsetSeconds ?? 0)
+    }
+
     /// Etichetta compatta per liste e deck: "Artista — Titolo", con i pezzi mancanti omessi.
     public var displayName: String {
         switch (artist.isEmpty, title.isEmpty) {

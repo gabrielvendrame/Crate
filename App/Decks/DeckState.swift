@@ -39,6 +39,16 @@ final class DeckState: Identifiable {
     /// nella stessa lista, come stanno nel database.
     private(set) var cuePoints: [CuePoint] = []
 
+    /// Il quantize è acceso. Lo ricopia `AppModel`: l'impostazione è una sola per tutta l'app e
+    /// non appartiene al singolo deck, ma il deck deve poterla leggere senza conoscere il modello.
+    var isQuantizeEnabled = true {
+        didSet { applyQuantize() }
+    }
+
+    var quantizeResolution: QuantizeResolution = .beat {
+        didSet { applyQuantize() }
+    }
+
     var playheadSeconds: Double = 0
     /// Quanti secondi di brano stanno nella vista zoomata. Otto secondi sono circa sedici battute
     /// a 128 BPM: abbastanza per vedere arrivare un cambio, abbastanza stretto per puntare un cue.
@@ -55,6 +65,7 @@ final class DeckState: Identifiable {
     private var paths: LibraryPaths?
     private var repository: TrackRepository?
     private var ticker: Task<Void, Never>?
+    private var gridSaveTask: Task<Void, Never>?
 
     /// Come segnalare all'app un errore che non riguarda la riproduzione — una scrittura di cue
     /// point che non è andata. Lo imposta `AppModel`, che lo mostra nell'avviso condiviso.
@@ -90,6 +101,31 @@ final class DeckState: Identifiable {
             cuePoints.compactMap { cue in cue.hotcueSlot.map { ($0, cue) } },
             uniquingKeysWith: { first, _ in first }
         )
+    }
+
+    /// La griglia della traccia caricata, `nil` finché il tempo non è stato rilevato o scritto a
+    /// mano. Deriva dalla riga in tabella: non c'è una seconda copia da tenere allineata.
+    var beatgrid: Beatgrid? { track?.beatgrid }
+
+    var hasBeatgrid: Bool { beatgrid != nil }
+
+    /// Aggancia un punto alla griglia, se il quantize è acceso.
+    ///
+    /// Fa lo stesso lavoro di `DeckEngine.quantized`, e il doppione è voluto: un cue si può
+    /// mettere anche su un deck la cui traccia non si è potuta decodificare — la waveform c'è
+    /// comunque, e il punto si vede — e in quel caso il motore non ha né durata né griglia da cui
+    /// partire.
+    func quantized(_ seconds: Double) -> Double {
+        guard isQuantizeEnabled, let beatgrid else { return seconds }
+        let snapped = beatgrid.snap(seconds, resolution: quantizeResolution)
+        return min(max(0, snapped), max(0, durationSeconds))
+    }
+
+    /// Passa al motore la griglia a cui agganciare il cue di lavoro. Da richiamare ogni volta che
+    /// cambia una delle tre cose che la determinano: traccia, griglia, impostazione del quantize.
+    private func applyQuantize() {
+        engine?.quantizeGrid = isQuantizeEnabled ? beatgrid : nil
+        engine?.quantizeResolution = quantizeResolution
     }
 
     /// Cosa segnare sulle waveform.
@@ -143,6 +179,10 @@ final class DeckState: Identifiable {
 
     func load(track: Track, analyzer: TrackAnalyzer?) async {
         stopTicker()
+        // Una griglia ancora da scrivere appartiene alla traccia di prima. Il task **non si
+        // annulla**: ha già in mano il suo identificativo, quindi la scrittura arriva a
+        // destinazione; si lascia solo andare, perché da qui in poi il campo serve alla nuova.
+        gridSaveTask = nil
         engine?.unload()
         self.track = track
         peaks = nil
@@ -196,6 +236,8 @@ final class DeckState: Identifiable {
             engine.load(audio)
             cueSeconds = engine.cueSeconds
             isAudioReady = true
+            // Dopo `load`, che azzera la griglia insieme al resto.
+            applyQuantize()
         } catch {
             playbackError = Self.describe(error)
         }
@@ -205,8 +247,23 @@ final class DeckState: Identifiable {
     func reloadPeaks(track: Track, analyzer: TrackAnalyzer?) async {
         guard self.track?.id == track.id, let analyzer else { return }
         self.track = track
+        applyQuantize()
         loadError = nil
         peaks = try? await analyzer.loadPeaks(for: track)
+    }
+
+    /// Rimette in pari la copia della traccia dopo una scrittura fatta altrove — un titolo
+    /// corretto nell'ispettore, un BPM rilevato da un'analisi in coda.
+    ///
+    /// Senza, il deck continuerebbe a mostrare i metadati di quando la traccia è stata caricata e
+    /// a quantizzare su una griglia vecchia. La chiama `AppModel` dall'osservazione della libreria.
+    func refreshTrack(from tracks: [Track]) {
+        guard let current = track,
+              let updated = tracks.first(where: { $0.id == current.id }),
+              updated != current
+        else { return }
+        track = updated
+        applyQuantize()
     }
 
     func clear() {
@@ -304,12 +361,16 @@ final class DeckState: Identifiable {
     /// fosse in pausa — è il comportamento del CDJ, dove il pad serve ad ascoltare quel punto.
     /// Diverso dal tasto CUE, che in pausa sul cue suona solo finché lo si tiene premuto.
     ///
-    /// **Pad vuoto**: memorizza il punto in cui si è adesso, col colore dello slot.
+    /// **Pad vuoto**: memorizza il punto in cui si è adesso — agganciato alla battuta se il
+    /// quantize è acceso — col colore dello slot.
     func pressHotCue(slot: Int) {
         guard track != nil else { return }
 
         if let cue = hotCues[slot] {
-            seek(toSeconds: cue.positionSeconds)
+            // Anche il salto passa dalla griglia: un cue piazzato a mano prima che ci fosse la
+            // beatgrid — o con il quantize spento — atterra comunque in battuta, che è il caso
+            // che conta quando si salta con l'altro deck che gira.
+            seek(toSeconds: quantized(cue.positionSeconds))
             engine?.play()
             syncAfterTransport()
         } else {
@@ -348,7 +409,7 @@ final class DeckState: Identifiable {
         guard let repository, let track else { return }
         let cue = CuePoint(
             trackID: track.id,
-            positionSeconds: min(max(0, seconds), max(0, durationSeconds)),
+            positionSeconds: quantized(min(max(0, seconds), max(0, durationSeconds))),
             colorIndex: slot - 1,
             hotcueSlot: slot
         )
@@ -405,6 +466,89 @@ final class DeckState: Identifiable {
     private func remove(cueID: String) {
         cuePoints.removeAll { $0.id == cueID }
     }
+
+    // MARK: - Griglia
+
+    /// Corsa del BPM scritto a mano.
+    ///
+    /// **Più larga di quella in cui cerca il rilevamento automatico** (70–200), e non per
+    /// distrazione: ÷2 su un pezzo a 128 deve poter dare 64. L'analisi si tiene stretta perché
+    /// allargarsi le farebbe solo prendere più ottave per l'altra; qui invece chi scrive il numero
+    /// sa cosa sta ascoltando.
+    static let bpmRange = 40.0...250.0
+
+    /// Sostituisce la griglia della traccia caricata e la scrive in tabella.
+    ///
+    /// `nil` la toglie: è il modo di dire che il pezzo non ha un tempo utile — un parlato, un
+    /// field recording — senza lasciare in tabella un numero che il quantize prenderebbe per buono.
+    func setBeatgrid(_ grid: Beatgrid?) {
+        guard let current = track, let repository else { return }
+        var updated = current
+        updated.bpm = grid?.bpm
+        updated.beatgridOffsetSeconds = grid?.offsetSeconds
+        // Aggiornamento ottimistico come per gli hot cue: la griglia si sposta sotto il dito, la
+        // scrittura segue.
+        track = updated
+        applyQuantize()
+
+        // **Scrittura ritardata**, come i campi dell'ispettore. Trascinando la griglia sulla
+        // waveform arrivano decine di aggiornamenti al secondo: una transazione per ciascuno
+        // vorrebbe dire centinaia di scritture su SQLite per un gesto solo, e ogni scrittura fa
+        // ripartire l'osservazione della libreria. Quello che conta è dove il dito si ferma.
+        let trackID = updated.id
+        gridSaveTask?.cancel()
+        gridSaveTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            do {
+                try await repository.updateBeatgrid(
+                    trackID: trackID,
+                    bpm: grid?.bpm,
+                    beatgridOffsetSeconds: grid?.offsetSeconds
+                )
+            } catch {
+                reportError?("Non ho potuto salvare la griglia: \(Self.describe(error))")
+            }
+        }
+    }
+
+    /// Cambia il BPM lasciando il downbeat dov'è.
+    func setBPM(_ bpm: Double) {
+        let clamped = min(max(Self.bpmRange.lowerBound, bpm), Self.bpmRange.upperBound)
+        guard let grid = beatgrid else {
+            setBeatgrid(Beatgrid(bpm: clamped, offsetSeconds: 0))
+            return
+        }
+        setBeatgrid(grid.withBPM(clamped))
+    }
+
+    /// Dimezza o raddoppia il tempo: è la correzione dell'errore di ottava, quello che il
+    /// rilevamento automatico sbaglia più spesso e che l'orecchio riconosce in un secondo.
+    ///
+    /// Il downbeat resta dov'è, perché in entrambi i casi continua a cadere su una battuta.
+    func scaleBPM(by factor: Double) {
+        guard let grid = beatgrid else { return }
+        setBPM(grid.bpm * factor)
+    }
+
+    /// Porta il primo downbeat sulla testina: è il gesto per rimettere in fase una griglia il cui
+    /// BPM è giusto ma che parte mezza battuta più in là.
+    func alignDownbeatToPlayhead() {
+        guard let grid = beatgrid else { return }
+        setBeatgrid(grid.alignedDownbeat(toSeconds: exactPlayheadSeconds))
+    }
+
+    /// Sposta la griglia intera, senza toccare il BPM.
+    func shiftGrid(bySeconds delta: Double) {
+        guard let grid = beatgrid else { return }
+        setBeatgrid(grid.shifted(bySeconds: delta))
+    }
+
+    /// Di quanto sposta la griglia un colpo delle frecce nell'editor: un millesimo di secondo per
+    /// clic, un centesimo tenendo ⇧. Sono i due ordini di grandezza che servono — rifinire un
+    /// downbeat già quasi giusto, e recuperare uno scarto che si vede a occhio sulla waveform.
+    static let gridNudgeSeconds = 0.001
+    static let gridCoarseNudgeSeconds = 0.01
 
     // MARK: - Posizione
 
