@@ -63,6 +63,27 @@ public struct Beatgrid: Hashable, Sendable {
         return snapped
     }
 
+    /// Dove finisce la testina saltando di `beats` battute — negativo all'indietro — agganciata
+    /// alla griglia se una risoluzione è data.
+    ///
+    /// **L'aggancio non è un dettaglio: è ciò che rende il salto ripetibile.** Partendo da un
+    /// punto qualsiasi — la testina che gira, o un cue piazzato a mano prima che ci fosse la
+    /// griglia — il primo salto porta in battuta e i successivi ci restano. Senza, ogni salto si
+    /// porterebbe dietro lo scarto iniziale, e dopo due o tre non si sarebbe più in battuta con
+    /// l'altro deck.
+    ///
+    /// Il risultato può cadere fuori dalla traccia: tenerlo dentro tocca a chi muove la testina,
+    /// che è l'unico a sapere quanto dura.
+    public func seconds(
+        afterJumping beats: Int,
+        fromSeconds seconds: Double,
+        snappingTo resolution: QuantizeResolution?
+    ) -> Double {
+        let target = seconds + Double(beats) * beatDuration
+        guard let resolution else { return target }
+        return snap(target, resolution: resolution)
+    }
+
     /// Sposta il primo downbeat senza toccare il BPM, riportandolo dentro la prima misura.
     ///
     /// Il rientro non è cosmesi: senza, trascinando la griglia in avanti per qualche minuto

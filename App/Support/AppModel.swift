@@ -116,9 +116,11 @@ final class AppModel {
         /// L'altezza sotto la quale il contenuto della fascia non entra più, **misurata**.
         ///
         /// Non stimata: con la fascia messa a un'altezza volutamente troppo bassa, il contenuto
-        /// deborda e riporta quanto gli serve — 346 impilati (due deck da 156 più il mixer), 203
-        /// affiancati. Per rimisurarli basta scrivere un'altezza piccola in preferenze e leggere
-        /// a quale valore l'app la corregge da sé al primo disegno.
+        /// deborda e riporta quanto gli serve — **348 impilati** (due deck da 156 più il mixer) e
+        /// **209 affiancati**, rimisurati il 2026-09-05 dopo i tasti di salto, che affiancati
+        /// stanno su una riga propria e l'hanno alzata di sei punti. Per rimisurarli basta
+        /// scrivere un'altezza piccola in preferenze e leggere a quale valore l'app la corregge
+        /// da sé al primo disegno.
         ///
         /// Il numero serve a far **fermare il trascinamento** dove ha senso, subito e senza
         /// scatti. Se un giorno diventa sbagliato — una riga in più in un deck — non taglia
@@ -127,7 +129,7 @@ final class AppModel {
         var minimumBarHeight: Double {
             switch self {
             case .stacked: 348
-            case .sideBySide: 205
+            case .sideBySide: 209
             }
         }
     }
@@ -508,6 +510,12 @@ final class AppModel {
         case .zoom(let closer):
             guard phase == .down else { return }
             deck.zoom(byFactor: closer ? 2 : 0.5)
+
+        case .beatJump(let forward):
+            // Anche le ripetizioni arrivano come `.down`: tenere premuto il tasto è il modo di
+            // attraversare il brano a salti, e ogni ripetizione è un salto.
+            guard phase == .down else { return }
+            deck.jump(forward: forward)
         }
     }
 

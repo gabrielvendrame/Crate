@@ -54,6 +54,21 @@ final class DeckState: Identifiable {
     /// a 128 BPM: abbastanza per vedere arrivare un cambio, abbastanza stretto per puntare un cue.
     var visibleSeconds: Double = 8
 
+    /// Di quante battute spostano i due tasti di salto.
+    ///
+    /// **Uno per deck, non uno solo per l'app**, al contrario del quantize: la taglia del salto si
+    /// cambia di continuo e in relazione a cosa si sta facendo su *quel* deck — 32 per raggiungere
+    /// il ritornello su A mentre su B si rifinisce di 8 — quindi due comandi distinti non sono un
+    /// doppione, sono due cose diverse. Si ricorda fra un avvio e l'altro, con la lettera del deck
+    /// nella chiave.
+    var beatJumpSize: BeatJumpSize {
+        didSet { UserDefaults.standard.set(beatJumpSize.rawValue, forKey: Self.jumpSizeKey(slot)) }
+    }
+
+    private nonisolated static func jumpSizeKey(_ slot: Slot) -> String {
+        "beatJump.\(slot.rawValue)"
+    }
+
     /// Copie osservabili di ciò che vive nel motore. `DeckEngine` sta fuori da `@Observable`:
     /// senza queste, muovere un fader non farebbe ridisegnare niente — è lo stesso motivo per cui
     /// esiste `isAudioReady`.
@@ -73,6 +88,10 @@ final class DeckState: Identifiable {
 
     init(slot: Slot) {
         self.slot = slot
+        // Sedici battute — quattro misure — è il salto con cui ci si sposta di una frase, quello
+        // che serve più spesso; le altre taglie sono a un clic.
+        beatJumpSize = (UserDefaults.standard.object(forKey: Self.jumpSizeKey(slot)) as? Int)
+            .flatMap(BeatJumpSize.init(rawValue:)) ?? .sixteen
     }
 
     /// Libreria e database. Separato da `attach(engine:)` di proposito: se l'uscita audio non si
@@ -572,6 +591,32 @@ final class DeckState: Identifiable {
         let clamped = min(max(0, seconds), max(0, durationSeconds))
         playheadSeconds = clamped
         engine?.seek(toSeconds: clamped)
+    }
+
+    /// Il salto di battute ha senso solo con una griglia: senza, «otto battute» non vuol dire
+    /// niente. I comandi si disabilitano, come i pad senza traccia — non falliscono in silenzio.
+    var canBeatJump: Bool { hasBeatgrid }
+
+    /// Sposta la testina di `beats` battute, in avanti o all'indietro.
+    ///
+    /// **Passa dalla griglia** anche a quantize acceso a metà lavoro: è ciò che impedisce alla
+    /// testina di scivolare fuori battuta dopo due salti, ed è la stessa scelta fatta per il salto
+    /// a un hot cue. Il punto d'arrivo si ferma agli estremi della traccia, come ogni altro seek:
+    /// saltare oltre la fine porta in fondo, non ferma il comando.
+    func jump(beats: Int) {
+        guard let beatgrid else { return }
+        seek(
+            toSeconds: beatgrid.seconds(
+                afterJumping: beats,
+                fromSeconds: exactPlayheadSeconds,
+                snappingTo: isQuantizeEnabled ? quantizeResolution : nil
+            )
+        )
+    }
+
+    /// Un colpo dei due tasti di salto, della taglia scelta per questo deck.
+    func jump(forward: Bool) {
+        jump(beats: forward ? beatJumpSize.beats : -beatJumpSize.beats)
     }
 
     func zoom(byFactor factor: Double) {

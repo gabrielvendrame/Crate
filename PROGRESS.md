@@ -209,26 +209,42 @@ Chiesti da Gabriel il **2026-09-04**, usando l'app:
 
 ---
 
-## M8 — Chiesto da Gabriel il 2026-09-05 · **todo**
+## M8 — Chiesto da Gabriel il 2026-09-05 · **in-progress**
 
-Tre richieste arrivate insieme, in ordine di quanto sono definite. **Nessuna è iniziata.**
+Tre richieste arrivate insieme, in ordine di quanto sono definite. **La prima è chiusa**, le
+altre due no.
 
-### 1. Salto di 8 · 16 · 32 · 64 battute — `todo`
+### 1. Salto di 8 · 16 · 32 · 64 battute — **done**
 
-Un selettore per l'unità e due pulsanti, avanti e indietro, per ogni deck. La beatgrid c'è già
-(M6), quindi è tutto lavoro di interfaccia più tre righe di modello.
-
-- `DeckState.jump(beats:)`: `seek(toSeconds: exactPlayheadSeconds + Double(beats) * grid.beatDuration)`.
-  **Deve passare da `quantized(_:)`**, o dopo due salti la testina scivola fuori dalla griglia.
-- Senza beatgrid i comandi vanno disabilitati, non fatti fallire in silenzio: è la regola già
-  seguita dai pad e dal quantize.
-- **Battute, non misure**: 8/16/32/64 sono i valori del *beat jump* dei CDJ, cioè quarti. Gabriel
-  ha scritto «battute» nel senso comune di quarto.
-- Dove: nella colonna del pitch sotto i tasti di nudge sta stretta — quella colonna è già a 90
-  punti con il fader, la percentuale, i due `−`/`+`, il BPM e il nudge. Valutare la riga degli hot
-  cue, che ha spazio a destra dopo «zoom 8 s», oppure una riga sotto l'overview.
-- Scorciatoie: naturali sarebbero `,` e `.` (posizioni stabili fra layout italiano e US, e libere).
-  Vanno aggiunte a `DeckKeyMonitor.actionByCharacter` **e** a `KeyboardShortcuts`.
+- [x] `done` — `Beatgrid.seconds(afterJumping:fromSeconds:snappingTo:)` in `DJKit`, più
+  `BeatJumpSize` (8/16/32/64, con `bars` per dirle anche in misure). Cinque test nuovi in
+  `BeatgridTests`, fra cui i due che contano: partendo 12 ms fuori battuta, quattro salti agganciati
+  atterrano esatti; senza aggancio lo scarto se lo portano dietro tutti
+- [x] `done` — `DeckState.jump(beats:)` e `jump(forward:)`: passano dalla griglia quando il
+  quantize è acceso, e da `seek`, che tiene la testina dentro la traccia
+- [x] `done` — La taglia è **per deck** (`DeckState.beatJumpSize`), non una per l'app come il
+  quantize: 32 per raggiungere il ritornello su A mentre su B si rifinisce di 8 sono due cose
+  diverse, non un doppione. Si ricorda fra un avvio e l'altro in `beatJump.A` / `beatJump.B`
+- [x] `done` — `BeatJumpControl`: `◀ 16 ▶` nella riga degli hot cue, a destra prima di «zoom 8 s».
+  Il numero in mezzo è il menu della taglia, così si legge sempre di quanto si sta per saltare.
+  Senza griglia i tre comandi sono spenti. Tenendo premuto un tasto si ripete
+- [x] `done` — Scorciatoie `,` e `.` in `DeckKeyMonitor`, con la riga nel pannello ⌘/. Le
+  ripetizioni del sistema fanno ripetere il salto (`repeatsWhenHeld`), che è diverso dalla
+  pressione tenuta di CUE e nudge — lì tenere premuto è un gesto *altro*, qui è lo stesso ripetuto
+- [x] `done` — `.accessibilityLabel` sui due tasti: senza, l'albero AX leggeva il nome del simbolo,
+  «Go To Start» e «Go To End», che qui vogliono dire l'opposto
+- [x] `done` — **Minimo della fascia affiancata rimisurato: 205 → 209.** La riga sotto i pad
+  passa da 12 a 18 punti perché adesso porta anche i tasti di salto. Impilati resta 348, invariato:
+  lì il controllo sta nella riga dei pad, che è più alta di lui
+- [x] `done` — **Provato pilotando l'app**, con la misura numerica e non a occhio. Su «Opa»
+  (124,9996 BPM, downbeat a 1,0456 s) da fermo a inizio traccia, taglia 16: `.` porta a **0:07.7**
+  e non a 0:07.6, cioè il salto è agganciato alla battuta e non è 16 battute nude; poi 0:15.4 e
+  0:23.1, e `,` ripercorre gli stessi punti fino a 0:00.0, dove si ferma. Con il quantize spento
+  (⌥⌘Q) un salto da 64 partito da un punto qualsiasi dell'overview sposta di **30,7 s esatti**,
+  cioè non aggancia; riacceso, lo stesso salto atterra a 4:50.9 invece di 4:51.0. Tenendo premuto
+  `.` per un secondo la testina fa undici salti e `,` la riporta esattamente dov'era. Taglia scelta
+  dal menu e ritrovata dopo il riavvio, con A a 64 e B a 16 indipendenti
+- [x] `done` — `swift test --package-path DJKit`: **152 test verdi** · `xcodebuild`: BUILD SUCCEEDED
 
 ### 2. Tag ("disco", "funky", …) da configurare e assegnare — `todo`
 
@@ -308,6 +324,10 @@ trascina. **Il quantize è acceso di default**, a 1/1, e aggancia i cue alla bat
 tracce vere in libreria la griglia sta entro 2–8 ms dagli attacchi di cassa per tutta la durata.
 Il limite noto è l'**ottava**: 87 con i charleston in levare contro 174 con la cassa su ogni
 quarto è ambiguo anche a orecchio, e si raddrizza con ÷2 o ×2.
+
+Da M8.1: **salto di battute**, 8/16/32/64, con i comandi `◀ 16 ▶` nella riga degli hot cue e i
+tasti `,` e `.`. La taglia è per deck e si ricorda; senza griglia i comandi sono spenti; il salto
+passa dal quantize, così non scivola fuori battuta ripetendolo.
 
 Da M7: ricerca in libreria (⌘F) con quattro filtri, eliminazione sempre confermata con lo spazio
 che libera, scorciatoie complete con il CUE tenuto premuto vero (pannello ⌘/), aggiornamento di
@@ -419,10 +439,11 @@ M3, M4 e M5, e la ripartenza a freddo aggiornata.
 
 ## Prossimo passo
 
-**Da fare, in ordine**: M8.1 (salto di battute) è il più definito e il più corto — si può chiudere
-in una sessione. M8.2 (tag) è chiaro ma tocca lo schema del database, quindi va fatto con calma e
-con la migrazione `v2` scritta bene. M8.3 va **prima discusso con Gabriel**: la domanda scritta in
-fondo alla sua descrizione è se gli serve l'album intero o solo il riconoscimento.
+**Da fare, in ordine**: M8.1 (salto di battute) è **chiusa** — comandi nella riga degli hot cue,
+tasti `,` e `.`, taglia per deck che si ricorda. Tocca a M8.2 (tag): è chiaro ma tocca lo schema del
+database, quindi va fatto con calma e con la migrazione `v2` scritta bene. M8.3 va **prima discusso
+con Gabriel**: la domanda scritta in fondo alla sua descrizione è se gli serve l'album intero o solo
+il riconoscimento.
 
 **Da far provare a Gabriel**, che è la parte non automatizzabile:
 

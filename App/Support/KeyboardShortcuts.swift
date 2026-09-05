@@ -29,6 +29,7 @@ enum KeyboardShortcuts {
             Entry(keys: "⇧1 – ⇧8", what: "Cancella l'hot cue di quello slot"),
             Entry(keys: "⌘1 · ⌘2", what: "Carica il brano selezionato sul deck A o B"),
             Entry(keys: "− · +", what: "Allarga o stringe la vista zoomata della waveform"),
+            Entry(keys: ", · .", what: "Salta indietro e avanti della taglia scelta · tenuti, ripetono"),
         ]),
         Group(title: "Griglia e quantize", entries: [
             Entry(keys: "⌥⌘Q", what: "Accende e spegne il quantize"),

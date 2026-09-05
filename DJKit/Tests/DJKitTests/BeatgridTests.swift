@@ -87,6 +87,53 @@ struct BeatgridTests {
         #expect(abs(moved.beatPosition(atSeconds: 9.3).rounded() - moved.beatPosition(atSeconds: 9.3)) < 1e-9)
     }
 
+    @Test("Il salto di battute sposta di quanto deve, nei due versi")
+    func beatJumpMovesByBeats() throws {
+        let grid = try #require(Beatgrid(bpm: 120, offsetSeconds: 0))
+        // Mezzo secondo a battuta: 16 battute sono 8 secondi.
+        #expect(abs(grid.seconds(afterJumping: 16, fromSeconds: 10, snappingTo: nil) - 18) < 1e-12)
+        #expect(abs(grid.seconds(afterJumping: -16, fromSeconds: 10, snappingTo: nil) - 2) < 1e-12)
+        #expect(abs(grid.seconds(afterJumping: 0, fromSeconds: 10, snappingTo: nil) - 10) < 1e-12)
+    }
+
+    @Test("Con l'aggancio, saltare da fuori griglia riporta in battuta e ci resta")
+    func beatJumpSnapsAndStaysOnGrid() throws {
+        let grid = try #require(Beatgrid(bpm: 120, offsetSeconds: 0))
+        // Si parte 12 ms fuori battuta, come capita saltando mentre la testina gira.
+        var position = 10.012
+        for _ in 0..<4 {
+            position = grid.seconds(afterJumping: 8, fromSeconds: position, snappingTo: .beat)
+        }
+        // Quattro salti da 8 battute sono 16 secondi, e lo scarto iniziale è sparito al primo.
+        #expect(abs(position - 26) < 1e-9)
+    }
+
+    @Test("Senza aggancio lo scarto iniziale se lo portano dietro tutti i salti")
+    func beatJumpWithoutSnapKeepsTheOffset() throws {
+        let grid = try #require(Beatgrid(bpm: 120, offsetSeconds: 0))
+        var position = 10.012
+        for _ in 0..<4 {
+            position = grid.seconds(afterJumping: 8, fromSeconds: position, snappingTo: nil)
+        }
+        #expect(abs(position - 26.012) < 1e-9)
+    }
+
+    @Test("A mezza battuta il salto si aggancia anche fra due battute")
+    func beatJumpSnapsToHalfBeat() throws {
+        let grid = try #require(Beatgrid(bpm: 120, offsetSeconds: 0))
+        // Partendo a metà battuta, l'aggancio a 1/2 lascia dov'è invece di tirare sull'uno.
+        let jumped = grid.seconds(afterJumping: 8, fromSeconds: 10.25, snappingTo: .halfBeat)
+        #expect(abs(jumped - 14.25) < 1e-9)
+    }
+
+    @Test("Le quattro taglie del salto contano in battute, non in misure")
+    func jumpSizesCountBeats() {
+        #expect(BeatJumpSize.allCases.map(\.beats) == [8, 16, 32, 64])
+        #expect(BeatJumpSize.sixteen.bars == 4)
+        #expect(BeatJumpSize.sixtyFour.bars == 16)
+        #expect(BeatJumpSize.eight.label == "8")
+    }
+
     @Test("Le due risoluzioni si scrivono come sui CDJ")
     func resolutionLabels() {
         #expect(QuantizeResolution.beat.label == "1/1")

@@ -23,9 +23,13 @@ struct HotCueRow: View {
                 HStack(spacing: 8) {
                     hoveredNote
                     Spacer(minLength: 0)
+                    BeatJumpControl(deck: deck)
                     zoomLabel
                 }
-                .frame(height: 12)
+                // Diciotto e non dodici: la riga adesso porta anche i tasti di salto, che sono
+                // alti quanto un tasto di nudge. Sono i sei punti in più nel minimo della fascia
+                // affiancata.
+                .frame(height: 18)
             }
         } else {
             pads
@@ -56,6 +60,7 @@ struct HotCueRow: View {
             if !isNarrow {
                 hoveredNote
                 Spacer(minLength: 0)
+                BeatJumpControl(deck: deck)
                 zoomLabel
             }
         }

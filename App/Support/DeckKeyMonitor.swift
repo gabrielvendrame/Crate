@@ -29,6 +29,7 @@ final class DeckKeyMonitor {
         case switchDeck
         case beatgrid
         case zoom(closer: Bool)
+        case beatJump(forward: Bool)
     }
 
     /// In che momento della pressione siamo.
@@ -62,6 +63,11 @@ final class DeckKeyMonitor {
         "g": .beatgrid,
         "-": .zoom(closer: false), "_": .zoom(closer: false),
         "+": .zoom(closer: true), "=": .zoom(closer: true),
+        // Virgola e punto: due tasti liberi, vicini alle dita e **nella stessa posizione** su
+        // layout italiano e US — che è la ragione per cui non sono le frecce, già prese dalle
+        // tabelle, né due lettere, che di posizione ne cambiano.
+        ",": .beatJump(forward: false),
+        ".": .beatJump(forward: true),
     ]
 
     /// Quali azioni hanno bisogno anche del rilascio e della pressione tenuta.
@@ -70,6 +76,15 @@ final class DeckKeyMonitor {
         case .cue, .nudge: true
         default: false
         }
+    }
+
+    /// Quali azioni **si ripetono** finché il tasto resta giù, invece di restare ferme al primo
+    /// colpo. Sono quelle il cui effetto è un passo: dieci salti di sedici battute si chiedono
+    /// tenendo premuto, non premendo dieci volte. Diverso da `isHoldable`, dove la pressione
+    /// tenuta è un gesto *altro* dal tocco — l'anteprima del CUE, la spinta del nudge.
+    private static func repeatsWhenHeld(_ action: Action) -> Bool {
+        if case .beatJump = action { return true }
+        return false
     }
 
     /// `isShifted` serve solo agli hot cue, dove significa "cancella".
@@ -148,6 +163,10 @@ final class DeckKeyMonitor {
         guard !isEditingText, !isSheetPresented else { return false }
 
         if isRepeat {
+            if Self.repeatsWhenHeld(action), pressed.contains(keyCode) {
+                onAction(action, .down, flags.contains(.shift))
+                return true
+            }
             // Le ripetizioni valgono solo dove tenere premuto ha un senso continuo, e la prima è
             // il momento in cui il tocco diventa pressione.
             guard Self.isHoldable(action), pressed.contains(keyCode) else { return true }
