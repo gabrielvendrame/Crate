@@ -138,7 +138,7 @@ Legenda: `[ ] todo` · `[~] in-progress` · `[x] done` · `[!] bloccato`
   agganciato (battuta 512,000 esatta), hot cue non agganciato a quantize spento (530,103), ÷2 e ×2,
   ⌥+trascinamento della griglia (0,712 → 1,031 s per 40 punti a zoom 8 s), scrittura ritardata
 
-## M7 — Rifiniture · **in corso**
+## M7 — Rifiniture · **done**
 
 *Esito atteso: uso quotidiano senza spigoli.*
 
@@ -152,9 +152,10 @@ Legenda: `[ ] todo` · `[~] in-progress` · `[x] done` · `[!] bloccato`
   fasi (pressione, tenuto, rilascio) — spazio, C per il CUE tenuto premuto, Z/X per nudge e
   spinta, D cambia deck, G apre la griglia, −/+ zoom. Pannello di aiuto in `KeyboardShortcuts`
   (⌘/), che è anche la sola tabella da tenere allineata
-- [x] `done` — `Import/ToolsUpdater.swift` + `ToolsUpdateSheet`: ultima release da GitHub, variante
-  **onedir** come quella impacchettata, spacchettata con `ditto` e scambiata alla fine — un
-  download interrotto non lascia un yt-dlp mezzo scritto
+- [x] `done` — `Import/ToolsUpdater.swift` + `SettingsSheet` (⌘,): ultima release da GitHub,
+  variante **onedir** come quella impacchettata, spacchettata con `ditto` e scambiata alla fine —
+  un download interrotto non lascia un yt-dlp mezzo scritto. **Provato davvero**, su una libreria
+  temporanea: scarica, spacchetta, e il binario installato risponde `--version` (21 s)
 - [x] `done` — Ricerca e filtro: `DJKit/Library/LibraryFilter` (parole in qualsiasi campo e
   ordine, accenti e maiuscole ignorati) + quattro sottoinsiemi, campo ⌘F e menu in toolbar,
   sottotitolo «n di m brani», stato vuoto dedicato per «nessun risultato» — 7 test
@@ -162,37 +163,52 @@ Legenda: `[ ] todo` · `[~] in-progress` · `[x] done` · `[!] bloccato`
   sparisce e **quanto spazio libera**; ⌫ sulla selezione e selezione multipla
 - [x] `done` — Messaggi d'errore leggibili: `AppModel.describe` al posto di `String(describing:)`,
   che su un errore di GRDB stampava la struttura interna del tipo
-- [ ] `todo` — Verifica: nessuna allocazione nel render callback
+- [x] `done` — **Verifica che nel render callback non ci sia niente di proibito**:
+  `Scripts/check-render-callback.sh` disassembla il binario linkato, segue la catena che parte dal
+  render block e cerca `malloc`, retain/release, `objc_msgSend`, lock, `swift_beginAccess`.
+  Sei funzioni attraversate — closure, forwarder, `render`, `adoptTrackRef`, `adoptSeek`,
+  `CubicInterpolator.sample` — e nessuna chiamata proibita. Statica e ripetibile, mentre un
+  profilo con Instruments vede il difetto solo se capita mentre si registra. **Due modi in cui
+  mentiva, entrambi corretti**: sull'oggetto non linkato i `bl` non hanno bersaglio e passava
+  sempre; includendo la fabbrica `makeRenderBlock` segnalava un `swift_retain` legittimo — ed è
+  la prova che sa anche dire di no
 
 Chiesti da Gabriel il **2026-09-04**, usando l'app:
 
-- [~] `in-progress` — **Foto dell'etichetta accanto al deck.** Deciso da Gabriel il 2026-09-05:
-  la foto sta **sotto il titolo del brano, nella colonna del deck, e piccola**. Il clic la apre in
-  un popover a dimensione piena — l'obiettivo originale del task era proprio vederla grande, e la
-  sola miniatura sul deck non lo darebbe.
-- [ ] `todo` — **Copertina da Discogs all'import.** Chiesto da Gabriel il 2026-09-05: appena un
-  brano arriva da YouTube, l'app cerca su Discogs e, **se i risultati sono più d'uno, lo fa
-  scegliere**; con un solo risultato lo applica da sé. Serve un token personale Discogs, che
-  Gabriel incolla nelle impostazioni dell'app — ed è il motivo per cui il confine «nessun account»
-  di `CLAUDE.md` si sposta, con la nota relativa
-- [ ] `todo` — **Disposizione dei deck commutabile**: oltre agli attuali due deck impilati
+- [x] `done` — **Foto dell'etichetta accanto al deck.** Deciso da Gabriel il 2026-09-05:
+  la foto sta **sotto il titolo del brano, nella colonna del deck, e piccola** (`DeckLabelPhoto`).
+  Il clic la apre in un popover a dimensione piena — l'obiettivo originale del task era vederla
+  grande, e la sola miniatura non lo darebbe. Stesso popover dalla miniatura in tabella. Il posto
+  resta occupato anche senza foto, o i comandi sotto ballerebbero al cambio di traccia.
+- [x] `done` — **Copertina da Discogs all'import.** `DJKit/Discogs/`: client, costruzione della
+  ricerca a tentativi (dal più stretto al più largo, vinile prima), decodifica, token in un file
+  0600 dentro la libreria. `DiscogsPickerSheet` mostra le edizioni in griglia con le copertine, il
+  vinile in cima. Automatico a fine import: un solo risultato si applica da sé, più d'uno vanno in
+  **coda** — non un foglio che salta su a metà di dieci import. Comando manuale nell'ispettore e
+  nel menu contestuale. 12 test, più due di integrazione con `CRATE_DISCOGS_TOKEN`
+- [x] `done` — **Disposizione dei deck commutabile**: oltre agli attuali due deck impilati
   (orizzontale su due righe), poterli affiancare su **due colonne**, waveform sempre orizzontali.
   Preferenza salvata, di default resta l'impilata. Il compromesso è scritto nei vincoli di
   `CLAUDE.md`: affiancando, ogni waveform ha metà larghezza. Attenzione a `HotCueRow` e
   all'overview, che a mezza larghezza vanno stretti: le bandierine numerate dell'overview si
   sovrappongono prima, e gli otto pad occupano quasi tutta la riga senza lasciare spazio alla
-  nota su hover — che a quel punto conviene spostare sotto i pad su una seconda riga
-- [ ] `todo` — **Scattare la foto dell'etichetta dall'app.** Oggi si può solo trascinare un file o
-  incollare dagli appunti. Serve `AVCaptureSession` con selezione del device: con Continuity
-  l'iPhone compare come un normale `AVCaptureDevice`, quindi la stessa schermata copre webcam e
-  telefono. Richiede `NSCameraUsageDescription` in `project.yml` (l'app non è sandboxata, quindi
-  basta quello più il consenso TCC al primo scatto).
+  nota su hover — che a quel punto conviene spostare sotto i pad su una seconda riga.
+  **Ed è successo davvero**: con i pad a larghezza fissa la riga ne pretendeva 396 e la fascia
+  diventava più larga della finestra — fader di pitch del deck B e mezzo mixer fuori dallo
+  schermo. Pad elastici fino a 26 punti, fader del mixer elastici, nota sotto i pad quando è
+  stretto. Menu **Vista**, ⌥⌘D, preferenza ricordata, impilata di default
+- [x] `done` — **Scattare la foto dell'etichetta dall'app.** `CameraController` +
+  `LabelCameraSheet`: elenco dei device con l'**iPhone via Continuity per primo** — inquadra un
+  disco in mano molto meglio di una webcam sopra lo schermo — anteprima dal vivo, scatto salvato
+  come le altre foto. `NSCameraUsageDescription` in `project.yml`: senza, TCC **termina il
+  processo** invece di rifiutare. Da provare al primo scatto, che è quando macOS chiede il
+  consenso: quello non è automatizzabile.
 
 ---
 
 ## Ripartenza a freddo
 
-**Stato:** da M0 a M6 chiuse. **Il motore audio c'è e suona, e le scalette si costruiscono.** L'import da
+**Stato:** da M0 a M7 chiuse: **l'app è finita** rispetto al piano. **Il motore audio c'è e suona, e le scalette si costruiscono.** L'import da
 YouTube funziona end-to-end ed è stato **provato da Gabriel dall'interfaccia**. L'analisi calcola i
 peaks a fine import e le due waveform si disegnano su entrambi i deck, colorate per bande.
 Caricando una traccia su un deck l'audio viene decodificato in RAM e il tasto play la fa suonare;
@@ -215,6 +231,13 @@ trascina. **Il quantize è acceso di default**, a 1/1, e aggancia i cue alla bat
 tracce vere in libreria la griglia sta entro 2–8 ms dagli attacchi di cassa per tutta la durata.
 Il limite noto è l'**ottava**: 87 con i charleston in levare contro 174 con la cassa su ogni
 quarto è ambiguo anche a orecchio, e si raddrizza con ÷2 o ×2.
+
+Da M7: ricerca in libreria (⌘F) con quattro filtri, eliminazione sempre confermata con lo spazio
+che libera, scorciatoie complete con il CUE tenuto premuto vero (pannello ⌘/), aggiornamento di
+yt-dlp e token di Discogs nelle impostazioni (⌘,), **copertine prese da Discogs all'import**, foto
+dell'etichetta sul deck e scattabile con l'iPhone via Continuity, deck impilati o affiancati
+(⌥⌘D). E `Scripts/check-render-callback.sh`, che verifica sul codice generato che nel callback
+audio non entrino allocazioni, lock o chiamate al runtime.
 
 **Il suono è stato sentito da Gabriel** («funziona»), quindi il motore è verificato all'orecchio e
 non solo in rendering offline. Restano da ascoltare con attenzione: che scrub e seek non producano
@@ -281,17 +304,20 @@ tempo escono dalla stessa passata, perché condividono la decodifica, che è la 
 l'import da YouTube, *«Waveform, deck audio con CUE e hot cue, editor delle scalette»* che chiude
 M3, M4 e M5, e la ripartenza a freddo aggiornata.
 
-## Prossimo passo — M7
+## Prossimo passo — quello che serve a Gabriel, non al piano
 
-1. **Da far provare a Gabriel**, che è la cosa che qui non si può automatizzare: se i BPM rilevati
-   sulle sue tracce sono quelli giusti e non un'ottava sopra o sotto, e se il quantize a 1/1 gli
-   basta o vuole 1/2 come predefinito. La griglia è verificata **numericamente** contro gli
-   attacchi di cassa, ma se un pezzo ha il tempo che va e viene lo si sente, non si misura.
-2. **Scorciatoie da tastiera** (M7): `DeckKeyMonitor` è il posto dove aggiungerle. Il CUE da
-   tastiera ha bisogno di `keyDown` **e** `keyUp` per il press-and-hold, che `keyboardShortcut`
-   non sa dare — il monitor invece sì, basta aggiungere la maschera `.keyUp`.
-3. Il resto di M7 sta nell'elenco sopra: ricerca nella libreria, aggiornamento di yt-dlp, stati
-   vuoti, e la verifica con Instruments che nel render callback non ci siano allocazioni.
+Il piano è finito. Quello che resta è **provare l'app usandola**, che è la sola cosa che qui non
+si può automatizzare:
+
+1. **Il token di Discogs**, che va generato e incollato in ⌘, — finché non c'è, la ricerca delle
+   copertine è spenta e i comandi sono disabilitati. Dopo, il primo import è la prova vera.
+2. **Il primo scatto dell'etichetta**: macOS chiede il consenso alla fotocamera al primo tentativo,
+   e con Continuity l'iPhone va sbloccato e vicino perché compaia nell'elenco.
+3. **I BPM sulle tracce di Gabriel**: se qualcuno è un'ottava sopra o sotto, ÷2 e ×2 lo
+   raddrizzano. La griglia è verificata numericamente contro gli attacchi di cassa, ma un pezzo
+   che accelera e rallenta si sente, non si misura.
+4. **Le scorciatoie a tasto nudo** si prendono i tasti che le tabelle userebbero per la selezione
+   per digitazione: se dà fastidio, il posto dove toglierle è `DeckKeyMonitor.actionByCharacter`.
 
 ## Note di implementazione
 

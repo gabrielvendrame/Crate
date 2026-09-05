@@ -168,6 +168,10 @@ struct LibraryView: View {
             Divider()
             Button("Rianalizza la traccia") { model.reanalyze(track) }
                 .disabled(track.audioFilename == nil || model.isAnalyzing(track))
+            Button("Cerca la copertina su Discogs") {
+                model.findArtwork(for: track, showEvenIfSingle: true)
+            }
+            .disabled(!model.hasDiscogsToken || model.isSearchingArtwork(for: track))
             Divider()
         }
 

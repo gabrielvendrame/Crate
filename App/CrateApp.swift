@@ -94,7 +94,8 @@ struct CrateApp: App {
             }
 
             CommandGroup(replacing: .appSettings) {
-                Button("Aggiorna yt-dlp…") { model.isToolsSheetPresented = true }
+                Button("Impostazioni…") { model.isSettingsSheetPresented = true }
+                    .keyboardShortcut(",", modifiers: .command)
             }
 
             CommandGroup(replacing: .help) {

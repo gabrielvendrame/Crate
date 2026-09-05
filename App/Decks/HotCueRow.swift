@@ -141,6 +141,9 @@ private struct HotCuePad: View {
     let onHover: (Bool) -> Void
 
     private static let cornerRadius: CGFloat = 4
+    /// Sotto questa larghezza il numero dello slot non si legge più. È il pavimento su cui la riga
+    /// smette di stringersi, e con due deck affiancati è la larghezza che si ottiene davvero.
+    static let minimumPadWidth: CGFloat = 26
 
     var body: some View {
         Button(action: onPress) {
@@ -154,7 +157,12 @@ private struct HotCuePad: View {
                 }
             }
             .foregroundStyle(cue == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.black.opacity(0.85)))
-            .frame(width: 46, height: 22)
+            // **Larghezza elastica, non fissa.** Con i pad a 46 punti la riga degli otto ne
+            // pretende 396, e affiancando i deck la fascia diventava più larga della finestra:
+            // il fader di pitch del deck B e metà mixer finivano fuori dallo schermo. Ora i pad
+            // si stringono fino a `minimumPadWidth` e la riga sta dentro qualsiasi colonna.
+            .frame(maxWidth: 46, minHeight: 22, maxHeight: 22)
+            .frame(minWidth: Self.minimumPadWidth)
             .background(background, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: Self.cornerRadius)

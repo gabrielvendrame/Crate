@@ -45,8 +45,18 @@ struct ContentView: View {
         .sheet(isPresented: $model.isImportSheetPresented) {
             ImportSheet()
         }
-        .sheet(isPresented: $model.isToolsSheetPresented) {
-            ToolsUpdateSheet()
+        .sheet(isPresented: $model.isSettingsSheetPresented) {
+            SettingsSheet()
+        }
+        // La scelta della copertina: una traccia per volta, dalla coda. Chiudere il foglio toglie
+        // quella scelta dalla coda e fa salire la successiva.
+        .sheet(item: Binding(
+            get: { model.artworkChoices.first },
+            set: { if $0 == nil, let first = model.artworkChoices.first {
+                model.dismissArtworkChoice(for: first.track)
+            } }
+        )) { choice in
+            DiscogsPickerSheet(choice: choice)
         }
         .sheet(isPresented: $model.isShortcutsSheetPresented) {
             ShortcutsSheet()

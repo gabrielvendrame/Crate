@@ -125,6 +125,18 @@ trattini è sempre scuro; sopra la waveform resta solo una linea di misura tenue
 in `Waveform.metal` toglie quei pixel all'altezza della forma d'onda, e senza griglia la corsia non
 c'è.
 
+**Il modello dell'app si raggiunge da `AppModel.shared`, non dall'`environment`.** Su macOS
+diversi pezzi di interfaccia vivono in una `NSHostingView` propria — toolbar, ispettore, fogli,
+popover — e quando uno di quei pezzi scrive nel modello, SwiftUI rivaluta il `body` del
+proprietario **dentro l'hosting view secondaria**, dove l'ambiente iniettato alla radice della
+scena non c'è: `@Environment(AppModel.self)` chiama `fatalError` e il processo muore. Bastava
+scrivere un carattere nel campo di ricerca. Reiniettare `.environment` copre un caso alla volta
+(è la toppa che era stata messa all'ispettore il 2026-09-04) e ne lascia scoperti altri.
+L'osservazione di `@Observable` funziona sulla lettura della proprietà, non su come si è ottenuto
+l'oggetto, quindi le viste si aggiornano come prima. Il prezzo — modello non sostituibile per
+preview e test di interfaccia — qui non è un prezzo: i test coprono la logica in `DJKit` e di
+preview non ce ne sono.
+
 **Persistenza: GRDB 7 (SQLite), non SwiftData.** Migrazioni esplicite e leggibili, e controllo
 totale sulla colonna `position` che ordina le playlist — che è il punto dove SwiftData dà più
 problemi. `ValueObservation` aggiorna la UI sul main actor.
@@ -173,7 +185,9 @@ DJKit/               Swift package locale — tutta la logica testabile senza UI
   Sources/DJKit/
     Model/           Track, CuePoint, Playlist, PlaylistItem
     Persistence/     AppDatabase, Migrations, repository
-    Import/          ToolLocator, YtDlpRunner, MetadataParser, ImportQueue
+    Import/          ToolLocator, YtDlpRunner, MetadataParser, ImportQueue, ToolsUpdater
+    Discogs/         DiscogsClient, DiscogsQuery, DiscogsRelease, DiscogsToken
+    Library/         LibraryFilter
     Audio/           AudioGraph, DeckEngine, DecodedTrack
     Analysis/        AudioDecoder, PeaksBuilder, TempoAnalyzer
     Storage/         LibraryPaths, PeaksFile
@@ -215,6 +229,14 @@ open Crate.xcodeproj
 `CRATE_NETWORK_TESTS=1 swift test --package-path DJKit --filter ImportIntegration` esegue i test
 che parlano davvero con YouTube: sono esclusi dalla suite normale perché richiedono rete e
 dipendono da un video che potrebbe sparire.
+
+`./Scripts/check-render-callback.sh` verifica **sul codice generato** che nel render callback audio
+non entrino allocazioni, lock o chiamate al runtime. Va rieseguito dopo qualsiasi modifica dentro
+`DeckRenderState.render` o alla catena che ne parte, ed è più affidabile di un profilo con
+Instruments, che quel difetto lo vede solo se capita mentre si registra.
+
+`CRATE_DISCOGS_TOKEN=... swift test --package-path DJKit --filter DiscogsIntegration` esegue i test
+che parlano davvero con Discogs.
 
 `xcodegen` si installa con `brew install xcodegen` (una tantum). Dopo aver aggiunto o rimosso file
 o dipendenze in `project.yml`, rigenera il progetto prima di compilare.

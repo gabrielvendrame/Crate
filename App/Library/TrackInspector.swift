@@ -31,6 +31,23 @@ struct TrackInspector: View {
                     LabelPhotoWell(track: track, side: .b)
                 }
                 .frame(maxWidth: .infinity)
+
+                Button {
+                    model.findArtwork(for: track, showEvenIfSingle: true)
+                } label: {
+                    if model.isSearchingArtwork(for: track) {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Cerco su Discogs…")
+                        }
+                    } else {
+                        Label("Cerca la copertina su Discogs", systemImage: "magnifyingglass")
+                    }
+                }
+                .disabled(!model.hasDiscogsToken || model.isSearchingArtwork(for: track))
+                .help(model.hasDiscogsToken
+                    ? "Mostra le edizioni che Discogs conosce e scegline la copertina"
+                    : "Serve il token di Discogs: mettilo nelle impostazioni (⌘,)")
             }
 
             Section("Dettagli") {
@@ -138,6 +155,7 @@ private struct LabelPhotoWell: View {
     let side: VinylSide
 
     @State private var isTargeted = false
+    @State private var isCameraPresented = false
 
     private var filename: String? {
         side == .a ? track.labelImageAFilename : track.labelImageBFilename
@@ -165,8 +183,9 @@ private struct LabelPhotoWell: View {
                     VStack(spacing: 4) {
                         Image(systemName: "photo")
                             .foregroundStyle(.tertiary)
-                        Text("trascina o incolla")
+                        Text("trascina, incolla\no scatta")
                             .font(.caption2)
+                            .multilineTextAlignment(.center)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -179,20 +198,36 @@ private struct LabelPhotoWell: View {
                 return true
             } isTargeted: { isTargeted = $0 }
             .contextMenu {
+                Button("Scatta una foto…") { isCameraPresented = true }
+                Button("Scegli un file…") { chooseFile() }
                 Button("Incolla immagine") {
                     model.setLabelImageFromPasteboard(side: side, for: track)
                 }
                 if filename != nil {
+                    Divider()
                     Button("Rimuovi", role: .destructive) {
                         model.removeLabelImage(side: side, for: track)
                     }
                 }
             }
             .onTapGesture(count: 2) { chooseFile() }
+            .sheet(isPresented: $isCameraPresented) {
+                LabelCameraSheet(track: track, side: side)
+            }
 
-            Text("Lato \(side.rawValue)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text("Lato \(side.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button {
+                    isCameraPresented = true
+                } label: {
+                    Image(systemName: "camera")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help("Scatta la foto dell'etichetta con la fotocamera o con l'iPhone")
+            }
         }
     }
 

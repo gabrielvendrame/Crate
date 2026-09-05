@@ -31,6 +31,10 @@ struct DeckBarView: View {
                     }
                     MixerStrip()
                 }
+                // Le due colonne si dividono lo spazio in parti uguali e **non oltre**: senza
+                // questo, la larghezza minima dei contenuti spingeva la fascia fuori dalla
+                // finestra invece di comprimersi.
+                .frame(maxWidth: .infinity)
             }
         }
         .background(.quaternary)

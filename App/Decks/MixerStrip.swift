@@ -23,8 +23,10 @@ struct MixerStrip: View {
                 Text("A")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
+                // Il crossfader si stringe se la finestra è stretta, invece di spingere fuori
+                // dal bordo i comandi che gli stanno accanto.
                 HorizontalFader(value: $model.crossfader, resetValue: 0.5)
-                    .frame(width: 260)
+                    .frame(minWidth: 120, maxWidth: 260)
                     .help("Crossfader: al centro suonano entrambi i deck · doppio clic per centrarlo")
                 Text("B")
                     .font(.caption2.weight(.bold))
@@ -81,7 +83,7 @@ struct MixerStrip: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             HorizontalFader(value: $deck.gain, resetValue: 1)
-                .frame(width: 84)
+                .frame(minWidth: 48, maxWidth: 84)
                 .help("Volume del deck · doppio clic per riportarlo al massimo")
         }
     }

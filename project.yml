@@ -37,6 +37,11 @@ targets:
         # L'app è locale e non sandboxata: scrive in Application Support e lancia yt-dlp.
         NSSupportsAutomaticTermination: false
         NSSupportsSuddenTermination: false
+        # Serve a fotografare l'etichetta del disco dall'app. Senza questa riga il processo
+        # **viene terminato** al primo accesso alla fotocamera, non riceve un rifiuto: e' il
+        # comportamento di TCC quando la stringa manca. Con Continuity l'iPhone compare come una
+        # normale fotocamera, quindi la stessa schermata copre webcam e telefono.
+        NSCameraUsageDescription: Per fotografare l'etichetta del disco e allegarla al brano.
     settings:
       base:
         PRODUCT_NAME: Crate

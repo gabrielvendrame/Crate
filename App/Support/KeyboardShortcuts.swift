@@ -46,6 +46,8 @@ enum KeyboardShortcuts {
         ]),
         Group(title: "Finestra", entries: [
             Entry(keys: "⌥⌘D", what: "Deck impilati o affiancati"),
+            Entry(keys: "⇧⌘D", what: "Passa all'altro deck"),
+            Entry(keys: "⌘,", what: "Impostazioni: token di Discogs e aggiornamento di yt-dlp"),
             Entry(keys: "⌘/", what: "Questo pannello"),
         ]),
     ]

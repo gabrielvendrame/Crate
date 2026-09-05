@@ -24,6 +24,8 @@
 	<string>public.app-category.music</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Per fotografare l'etichetta del disco e allegarla al brano.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
 	<key>NSSupportsAutomaticTermination</key>

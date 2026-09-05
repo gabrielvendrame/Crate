@@ -56,6 +56,13 @@ public enum ImportError: LocalizedError {
 public final class ImportQueue {
     public private(set) var jobs: [ImportJob] = []
 
+    /// Chiamato quando un brano è entrato in libreria ed è stato analizzato.
+    ///
+    /// La coda si ferma a YouTube: cosa succede dopo — cercare la copertina su Discogs, per
+    /// esempio — non la riguarda, e infilarcelo dentro legherebbe l'import a un servizio che
+    /// può non essere configurato.
+    public var onTrackImported: ((Track) -> Void)?
+
     private let runner: YtDlpRunner
     private let converter: AudioConverter
     private let repository: TrackRepository
@@ -184,9 +191,9 @@ public final class ImportQueue {
             track.analysisState = .analyzing
             try await repository.save(track)
 
-            // Peaks: è l'ultimo passo perché è l'unico che si può rifare da solo in seguito, e
-            // una traccia senza waveform resta comunque in libreria. Il rilevamento del tempo si
-            // aggancia qui in M6.
+            // Analisi: è l'ultimo passo perché è l'unico che si può rifare da solo in seguito, e
+            // una traccia senza waveform resta comunque in libreria. Da M6 la stessa passata
+            // calcola anche BPM e beatgrid.
             update(jobID) {
                 $0.state = .analyzing
                 $0.progress = 0
@@ -203,6 +210,7 @@ public final class ImportQueue {
                 $0.state = .finished
                 $0.message = nil
             }
+            onTrackImported?(track)
         } catch {
             let description = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             if let trackID {

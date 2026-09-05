@@ -46,6 +46,7 @@ final class AppModel {
     private(set) var importQueue: ImportQueue?
     private(set) var analyzer: TrackAnalyzer?
     private(set) var toolLocator: ToolLocator?
+    private(set) var discogsToken: DiscogsToken?
     /// Il grafo audio. `nil` solo se l'uscita non si è potuta configurare: in quel caso la
     /// libreria resta usabile e sono i deck a restare muti.
     private(set) var audioGraph: AudioGraph?
@@ -175,7 +176,7 @@ final class AppModel {
     var selection: SidebarSelection? = .library
     var selectedTrackIDs: Set<String> = []
     var isImportSheetPresented = false
-    var isToolsSheetPresented = false
+    var isSettingsSheetPresented = false
     var isShortcutsSheetPresented = false
     var isInspectorPresented = true
     /// Tracce su cui è in corso un ricalcolo manuale della waveform.
@@ -193,6 +194,7 @@ final class AppModel {
             let locator = ToolLocator(paths: paths)
 
             self.toolLocator = locator
+            self.discogsToken = DiscogsToken(paths: paths)
             self.paths = paths
             self.database = database
             self.tracks = trackRepository
@@ -225,6 +227,11 @@ final class AppModel {
             deckB.attach(engine: graph.makeDeck())
         } catch {
             transientError = Self.describe(error)
+        }
+
+        // Appena un brano è dentro, si va a cercargli la copertina.
+        importQueue?.onTrackImported = { [weak self] track in
+            self?.findArtwork(for: track, showEvenIfSingle: false)
         }
 
         applyQuantizeToDecks()
@@ -569,6 +576,108 @@ final class AppModel {
             } catch {
                 toolsUpdateState = .failed(Self.describe(error))
             }
+        }
+    }
+
+    // MARK: - Copertine da Discogs
+
+    /// Una scelta in attesa: la traccia e le edizioni fra cui decidere.
+    struct ArtworkChoice: Identifiable {
+        let track: Track
+        let releases: [DiscogsRelease]
+        var id: String { track.id }
+    }
+
+    /// Le scelte in coda, una per traccia.
+    ///
+    /// **Una coda e non un foglio che si apre da solo a metà import**: importando dieci link, dieci
+    /// finestre che saltano su mentre si sta guardando altro sono un modo di far perdere il lavoro.
+    /// Il foglio mostra la prima e passa alla successiva, e si può chiudere lasciandole lì.
+    private(set) var artworkChoices: [ArtworkChoice] = []
+    /// Tracce su cui una ricerca è in corso, per non lanciarne due.
+    private(set) var artworkSearchIDs: Set<String> = []
+
+    var isSearchingArtwork: Bool { !artworkSearchIDs.isEmpty }
+
+    var hasDiscogsToken: Bool { discogsToken?.read() != nil }
+
+    func isSearchingArtwork(for track: Track) -> Bool {
+        artworkSearchIDs.contains(track.id)
+    }
+
+    /// Cerca su Discogs le copertine di una traccia.
+    ///
+    /// Con **un solo risultato la copertina si applica da sé**: è la decisione di Gabriel del
+    /// 2026-09-05, e ha senso — se Discogs conosce una sola edizione in vinile di quel brano, non
+    /// c'è niente da scegliere. Con più di uno la scelta va in coda.
+    ///
+    /// `showEvenIfSingle` serve al comando manuale: chiedendola apposta si vuole vedere cosa c'è,
+    /// anche se è uno solo.
+    func findArtwork(for track: Track, showEvenIfSingle: Bool) {
+        guard let token = discogsToken?.read() else { return }
+        guard !artworkSearchIDs.contains(track.id) else { return }
+        // Automatico: solo se la traccia non ha già una foto. Non si sovrascrive quello che
+        // Gabriel ha già fotografato o scelto.
+        if !showEvenIfSingle, track.labelImageAFilename != nil { return }
+
+        artworkSearchIDs.insert(track.id)
+        Task {
+            defer { artworkSearchIDs.remove(track.id) }
+            do {
+                let client = DiscogsClient(token: token)
+                let releases = try await client.search(attempts: DiscogsQuery.attempts(for: track))
+                guard !releases.isEmpty else {
+                    if showEvenIfSingle {
+                        transientError = "Discogs non conosce «\(track.displayName)»."
+                    }
+                    return
+                }
+                if releases.count == 1, !showEvenIfSingle {
+                    await applyArtwork(releases[0], to: track)
+                } else {
+                    artworkChoices.removeAll { $0.track.id == track.id }
+                    artworkChoices.append(ArtworkChoice(track: track, releases: releases))
+                }
+            } catch {
+                // Un fallimento di Discogs non deve interrompere niente: l'import è già finito e
+                // la foto si può sempre mettere a mano.
+                if showEvenIfSingle { transientError = Self.describe(error) }
+            }
+        }
+    }
+
+    /// Scarica la copertina scelta e la salva come etichetta del lato A.
+    func applyArtwork(_ release: DiscogsRelease, to track: Track) async {
+        guard let paths, let token = discogsToken?.read() else { return }
+        guard let url = release.coverURL ?? release.thumbnailURL else {
+            transientError = "Questa edizione su Discogs non ha una copertina."
+            return
+        }
+        do {
+            let data = try await DiscogsClient(token: token).imageData(from: url)
+            let filename = try ArtworkStore.save(
+                data: data, trackID: track.id, side: .a, paths: paths
+            )
+            // La riga può essere cambiata nel frattempo: si riparte da quella in tabella, non
+            // dalla copia che avevamo in mano quando è partita la ricerca.
+            var updated = trackList.first { $0.id == track.id } ?? track
+            updated.labelImageAFilename = filename
+            save(track: updated)
+        } catch {
+            transientError = "Non ho potuto scaricare la copertina: \(Self.describe(error))"
+        }
+        dismissArtworkChoice(for: track)
+    }
+
+    func dismissArtworkChoice(for track: Track) {
+        artworkChoices.removeAll { $0.track.id == track.id }
+    }
+
+    func saveDiscogsToken(_ token: String) {
+        do {
+            try discogsToken?.write(token)
+        } catch {
+            transientError = "Non ho potuto salvare il token: \(Self.describe(error))"
         }
     }
 

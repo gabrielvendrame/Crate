@@ -35,6 +35,17 @@ enum ArtworkStore {
         return filename
     }
 
+    /// Salva un'immagine già scaricata in memoria — è il caso della copertina presa da Discogs.
+    static func save(
+        data: Data,
+        trackID: String,
+        side: VinylSide,
+        paths: LibraryPaths
+    ) throws -> String {
+        guard let image = NSImage(data: data) else { throw Failure.unreadableImage }
+        return try save(image: image, trackID: trackID, side: side, paths: paths)
+    }
+
     static func save(
         contentsOf url: URL,
         trackID: String,
