@@ -16,7 +16,8 @@ import SwiftUI
 /// padre si rifà, questa risulta invariata e il suo sottoalbero viene saltato. Continua invece ad
 /// aggiornarsi da sé quando cambia ciò che legge davvero — posizione, peaks, cue.
 struct DeckWaveforms: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     let deck: DeckState
 
     /// Posizione da cui è partito il trascinamento: senza ancora, ogni evento sommerebbe di nuovo

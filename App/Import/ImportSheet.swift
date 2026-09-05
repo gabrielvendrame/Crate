@@ -5,7 +5,8 @@ import DJKit
 ///
 /// Resta aperto dopo l'aggiunta perché i link si incollano quasi sempre a raffica.
 struct ImportSheet: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     @Environment(\.dismiss) private var dismiss
 
     @State private var input = ""

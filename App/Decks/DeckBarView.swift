@@ -3,25 +3,43 @@ import DJKit
 
 /// La fascia dei deck, sempre visibile in fondo alla finestra.
 ///
-/// I deck sono **impilati**, A sopra e B sotto: così ogni waveform occupa tutta la larghezza
-/// disponibile e scorre in orizzontale, tempo da sinistra a destra. Affiancarli dimezzerebbe la
-/// larghezza e renderebbe illeggibile proprio ciò che serve guardare.
+/// I deck sono **impilati di default**, A sopra e B sotto: così ogni waveform occupa tutta la
+/// larghezza disponibile e scorre in orizzontale, tempo da sinistra a destra. Affiancandoli ogni
+/// waveform ne ha metà — è la disposizione alternativa chiesta da Gabriel, non un pari merito, e
+/// il compromesso è scritto nei vincoli di `CLAUDE.md`.
+///
+/// In tutti e due i casi il mixer sta **fra** i due deck, come su un banco vero: sotto quando
+/// sono impilati, in mezzo alle due colonne quando sono affiancati.
 struct DeckBarView: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
 
     var body: some View {
-        VStack(spacing: 1) {
-            DeckStrip(deck: model.deckA)
-            // Il mixer sta fra i due deck, come su un banco vero.
-            MixerStrip()
-            DeckStrip(deck: model.deckB)
+        Group {
+            switch model.deckLayout {
+            case .stacked:
+                VStack(spacing: 1) {
+                    DeckStrip(deck: model.deckA)
+                    MixerStrip()
+                    DeckStrip(deck: model.deckB)
+                }
+            case .sideBySide:
+                VStack(spacing: 1) {
+                    HStack(spacing: 1) {
+                        DeckStrip(deck: model.deckA)
+                        DeckStrip(deck: model.deckB)
+                    }
+                    MixerStrip()
+                }
+            }
         }
         .background(.quaternary)
     }
 }
 
 private struct DeckStrip: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     let deck: DeckState
 
     @State private var isDropTargeted = false
@@ -33,6 +51,9 @@ private struct DeckStrip: View {
             DeckWaveforms(deck: deck)
             pitch
         }
+        // Affiancati, la colonna di sinistra si stringe: con la larghezza di prima resterebbe
+        // meno di metà finestra alle waveform, che è la cosa che non si può comprimere.
+        .environment(\.deckIsNarrow, model.deckLayout == .sideBySide)
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .underPageBackgroundColor))
@@ -60,6 +81,8 @@ private struct DeckStrip: View {
 
     private var isFocused: Bool { model.focusedDeckSlot == deck.slot }
 
+    @Environment(\.deckIsNarrow) private var isNarrow
+
     // MARK: - Colonna sinistra
 
     private var identity: some View {
@@ -73,6 +96,10 @@ private struct DeckStrip: View {
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .foregroundStyle(deck.track == nil ? .tertiary : .primary)
+
+            if let track = deck.track {
+                DeckLabelPhoto(track: track)
+            }
 
             Spacer(minLength: 0)
 
@@ -97,7 +124,7 @@ private struct DeckStrip: View {
                     .help(error)
             }
         }
-        .frame(width: 150, alignment: .leading)
+        .frame(width: isNarrow ? 118 : 150, alignment: .leading)
         .contentShape(Rectangle())
         // Un clic sulla colonna di sinistra sposta il fuoco: sui pulsanti il clic arriva a loro,
         // che il fuoco lo spostano comunque.
@@ -193,6 +220,13 @@ private struct DeckStrip: View {
         .help(deck.hasBeatgrid ? "BPM effettivo · clic per correggere la griglia" : "Nessuna griglia · clic per metterne una")
         .popover(isPresented: $isGridEditorPresented, arrowEdge: .leading) {
             BeatgridEditor(deck: deck)
+        }
+        // Il tasto `G` chiede l'editor del deck attivo: la richiesta arriva dal modello, e il
+        // deck a cui è indirizzata se la consuma.
+        .onChange(of: model.gridEditorRequest) { _, request in
+            guard request == deck.slot else { return }
+            model.gridEditorRequest = nil
+            isGridEditorPresented = deck.track != nil
         }
     }
 

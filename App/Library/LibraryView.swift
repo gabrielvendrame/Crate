@@ -3,11 +3,14 @@ import DJKit
 
 /// La libreria completa: tabella, ricerca e ispettore della traccia selezionata.
 struct LibraryView: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     @State private var sortOrder = [KeyPathComparator(\Track.addedAt, order: .reverse)]
 
+    /// Prima si filtra, poi si ordina: l'ordinamento è una faccenda della tabella, il filtro no —
+    /// lo stesso sottoinsieme serve anche al conteggio e ai comandi di menu.
     private var sortedTracks: [Track] {
-        model.trackList.sorted(using: sortOrder)
+        model.filteredTracks.sorted(using: sortOrder)
     }
 
     var body: some View {
@@ -16,11 +19,26 @@ struct LibraryView: View {
         Group {
             if model.trackList.isEmpty {
                 EmptyLibraryView { model.isImportSheetPresented = true }
+            } else if sortedTracks.isEmpty {
+                NoMatchesView(filter: model.libraryFilter) {
+                    model.libraryFilter = LibraryFilter()
+                }
             } else {
                 table
             }
         }
         .navigationTitle("Libreria")
+        .navigationSubtitle(subtitle)
+        .searchable(
+            text: $model.libraryFilter.text,
+            placement: .toolbar,
+            prompt: "Cerca per titolo, artista o album"
+        )
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                scopePicker
+            }
+        }
         .inspector(isPresented: $model.isInspectorPresented) {
             Group {
                 if let track = model.selectedTrack {
@@ -33,13 +51,31 @@ struct LibraryView: View {
                     )
                 }
             }
-            // L'ispettore è una colonna ospitata a parte, come il foglio di import: su macOS non
-            // è garantito che erediti l'`environment` del contenuto, e `@Environment(AppModel.self)`
-            // che non trova il modello **fa cadere l'app** invece di restare nil. Reiniettarlo
-            // costa niente. C'è un crash del 2026-09-04 16:26 con questa firma.
-            .environment(model)
             .inspectorColumnWidth(min: 260, ideal: 320, max: 420)
         }
+    }
+
+    /// Quante tracce si stanno guardando, e su quante. Il secondo numero compare solo quando un
+    /// filtro è attivo: senza filtro sarebbe due volte lo stesso.
+    private var subtitle: String {
+        let shown = sortedTracks.count
+        let total = model.trackList.count
+        if model.libraryFilter.isActive {
+            return "\(shown) di \(total) brani"
+        }
+        return total == 1 ? "1 brano" : "\(total) brani"
+    }
+
+    private var scopePicker: some View {
+        @Bindable var model = model
+
+        return Picker("Filtro", selection: $model.libraryFilter.scope) {
+            ForEach(LibraryFilter.Scope.allCases) { scope in
+                Text(scope.label).tag(scope)
+            }
+        }
+        .pickerStyle(.menu)
+        .help("Mostra solo una parte della libreria")
     }
 
     private var table: some View {
@@ -94,6 +130,10 @@ struct LibraryView: View {
             // Doppio clic: sul deck A, che è quello da cui si parte sempre.
             if let track = track(in: ids) { model.load(track, on: .a) }
         }
+        // ⌫ sulla selezione, come in ogni lista di macOS. Chiede conferma come tutto il resto.
+        .onDeleteCommand {
+            model.requestDeletion(of: model.selectedTrackIDs)
+        }
     }
 
     private func track(in ids: Set<Track.ID>) -> Track? {
@@ -126,19 +166,30 @@ struct LibraryView: View {
             Button("Carica sul deck A") { model.load(track, on: .a) }
             Button("Carica sul deck B") { model.load(track, on: .b) }
             Divider()
-            Button("Ricalcola la waveform") { model.reanalyze(track) }
+            Button("Rianalizza la traccia") { model.reanalyze(track) }
                 .disabled(track.audioFilename == nil || model.isAnalyzing(track))
             Divider()
-            Button("Elimina dalla libreria", role: .destructive) {
-                model.deleteTrack(track)
+        }
+
+        if !ids.isEmpty {
+            Button(
+                ids.count == 1 ? "Elimina dalla libreria" : "Elimina \(ids.count) brani",
+                role: .destructive
+            ) {
+                model.requestDeletion(of: ids)
             }
         }
     }
 }
 
 /// Miniatura dell'etichetta lato A: serve a riconoscere il disco a colpo d'occhio nella lista.
+///
+/// Il clic la apre a dimensione piena. Un pulsante dentro una cella di `Table` e non un
+/// `onTapGesture`: il gesto si mangerebbe il clic della riga, e la selezione smetterebbe di
+/// funzionare proprio sulla prima colonna — è lo stesso inciampo già visto sulle righe di `List`.
 private struct LabelThumbnail: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     let track: Track
 
     var body: some View {
@@ -208,6 +259,38 @@ private struct AnalysisStateBadge: View {
         case .ready: return .secondary
         case .failed: return .red
         default: return .accentColor
+        }
+    }
+}
+
+/// Cosa si vede quando il filtro non lascia passare niente.
+///
+/// Separato dalla libreria vuota davvero, e non è pignoleria: sono due situazioni diverse e il
+/// gesto che le risolve è opposto — lì si importa un brano, qui si toglie il filtro. Un unico
+/// «nessun risultato» lascerebbe l'utente a chiedersi dove sono finiti i suoi dischi.
+private struct NoMatchesView: View {
+    let filter: LibraryFilter
+    let onClear: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Nessun brano trovato", systemImage: "magnifyingglass")
+        } description: {
+            Text(description)
+        } actions: {
+            Button("Togli il filtro", action: onClear)
+        }
+    }
+
+    private var description: String {
+        let trimmed = filter.text.trimmingCharacters(in: .whitespaces)
+        switch (trimmed.isEmpty, filter.scope) {
+        case (true, let scope):
+            return "Nessun brano nella selezione «\(scope.label)»."
+        case (false, .all):
+            return "Niente in libreria corrisponde a «\(trimmed)»."
+        case (false, let scope):
+            return "Niente corrisponde a «\(trimmed)» dentro «\(scope.label)»."
         }
     }
 }

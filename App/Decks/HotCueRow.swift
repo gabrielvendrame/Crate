@@ -9,10 +9,30 @@ import SwiftUI
 struct HotCueRow: View {
     let deck: DeckState
 
+    @Environment(\.deckIsNarrow) private var isNarrow
     @State private var editingSlot: Int?
     @State private var hoveredSlot: Int?
 
+    /// Affiancando i deck gli otto pad si prendono quasi tutta la riga e alla nota non resta
+    /// niente: lì la nota va **sotto**, su una seconda riga, invece di essere schiacciata a due
+    /// parole. È il compromesso previsto quando la disposizione a due colonne è stata chiesta.
     var body: some View {
+        if isNarrow {
+            VStack(alignment: .leading, spacing: 2) {
+                pads
+                HStack(spacing: 8) {
+                    hoveredNote
+                    Spacer(minLength: 0)
+                    zoomLabel
+                }
+                .frame(height: 12)
+            }
+        } else {
+            pads
+        }
+    }
+
+    private var pads: some View {
         HStack(spacing: 8) {
             HStack(spacing: 4) {
                 ForEach(Array(CuePoint.hotcueSlotRange), id: \.self) { slot in
@@ -33,15 +53,19 @@ struct HotCueRow: View {
                 }
             }
 
-            hoveredNote
-
-            Spacer(minLength: 0)
-
-            // Il livello di zoom, che finiva nella colonna del pitch: là adesso c'è il fader.
-            Text(String(format: "zoom %.0f s", deck.visibleSeconds))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            if !isNarrow {
+                hoveredNote
+                Spacer(minLength: 0)
+                zoomLabel
+            }
         }
+    }
+
+    /// Il livello di zoom, che finiva nella colonna del pitch: là adesso c'è il fader.
+    private var zoomLabel: some View {
+        Text(String(format: "zoom %.0f s", deck.visibleSeconds))
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
     }
 
     /// La nota del pad sotto il puntatore, accanto alla riga.

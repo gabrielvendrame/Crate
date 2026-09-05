@@ -8,7 +8,8 @@ import SwiftUI
 /// per traccia — quando l'analisi ha sbagliato — non mentre si suona. Il display del BPM è già
 /// lì, ed è la cosa che si guarda quando si sospetta che la griglia non torni.
 struct BeatgridEditor: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     let deck: DeckState
 
     /// Testo del campo BPM, tenuto separato dal valore: mentre si scrive "1", "12", "128" il

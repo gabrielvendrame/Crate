@@ -7,7 +7,8 @@ import DJKit
 /// I campi si salvano da soli poco dopo che si smette di scrivere: non c'è un pulsante "Salva"
 /// perché correggere un titolo sbagliato dal parsing è un gesto che si ripete di continuo.
 struct TrackInspector: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     let track: Track
 
     @State private var title = ""
@@ -69,7 +70,7 @@ struct TrackInspector: View {
 
             Section {
                 Button("Elimina dalla libreria", role: .destructive) {
-                    model.deleteTrack(track)
+                    model.requestDeletion(of: track)
                 }
             }
         }
@@ -131,7 +132,8 @@ struct TrackInspector: View {
 /// Riquadro per la foto di un lato del disco: accetta un file trascinato dal Finder oppure
 /// un'immagine incollata dagli appunti.
 private struct LabelPhotoWell: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     let track: Track
     let side: VinylSide
 

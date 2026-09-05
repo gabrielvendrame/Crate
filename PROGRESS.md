@@ -138,24 +138,43 @@ Legenda: `[ ] todo` · `[~] in-progress` · `[x] done` · `[!] bloccato`
   agganciato (battuta 512,000 esatta), hot cue non agganciato a quantize spento (530,103), ÷2 e ×2,
   ⌥+trascinamento della griglia (0,712 → 1,031 s per 40 punti a zoom 8 s), scrittura ritardata
 
-## M7 — Rifiniture · **todo**
+## M7 — Rifiniture · **in corso**
 
 *Esito atteso: uso quotidiano senza spigoli.*
 
-- [ ] `todo` — Scorciatoie da tastiera complete + pannello di aiuto
-- [ ] `todo` — Comando "Aggiorna yt-dlp": scarica l'ultima release GitHub in `Tools/`
-- [ ] `todo` — Ricerca e filtro nella libreria
-- [ ] `todo` — Eliminazione traccia con rimozione dei file associati e conferma
-- [ ] `todo` — Stati vuoti e messaggi d'errore leggibili
-- [ ] `todo` — Verifica con Instruments (Audio System Trace): nessuna allocazione nel render callback
+- [x] `done` — **Crash risolto alla radice: niente più `@Environment(AppModel.self)`.** Bastava
+  scrivere un carattere nel campo di ricerca in toolbar per far cadere l'app. Causa: SwiftUI
+  rivaluta il `body` del proprietario **dentro l'hosting view della toolbar**, dove l'ambiente
+  iniettato alla radice della scena non c'è, e il property wrapper chiama `fatalError`.
+  Reiniettare `.environment` copre un caso alla volta — è la toppa già messa all'ispettore il
+  2026-09-04. Ora c'è `AppModel.shared`, letto direttamente da tutte e dodici le viste
+- [x] `done` — Scorciatoie complete: `DeckKeyMonitor` riscritto con `keyDown` **e** `keyUp` e tre
+  fasi (pressione, tenuto, rilascio) — spazio, C per il CUE tenuto premuto, Z/X per nudge e
+  spinta, D cambia deck, G apre la griglia, −/+ zoom. Pannello di aiuto in `KeyboardShortcuts`
+  (⌘/), che è anche la sola tabella da tenere allineata
+- [x] `done` — `Import/ToolsUpdater.swift` + `ToolsUpdateSheet`: ultima release da GitHub, variante
+  **onedir** come quella impacchettata, spacchettata con `ditto` e scambiata alla fine — un
+  download interrotto non lascia un yt-dlp mezzo scritto
+- [x] `done` — Ricerca e filtro: `DJKit/Library/LibraryFilter` (parole in qualsiasi campo e
+  ordine, accenti e maiuscole ignorati) + quattro sottoinsiemi, campo ⌘F e menu in toolbar,
+  sottotitolo «n di m brani», stato vuoto dedicato per «nessun risultato» — 7 test
+- [x] `done` — Eliminazione con conferma: sempre, anche per una traccia sola, con l'elenco di cosa
+  sparisce e **quanto spazio libera**; ⌫ sulla selezione e selezione multipla
+- [x] `done` — Messaggi d'errore leggibili: `AppModel.describe` al posto di `String(describing:)`,
+  che su un errore di GRDB stampava la struttura interna del tipo
+- [ ] `todo` — Verifica: nessuna allocazione nel render callback
 
 Chiesti da Gabriel il **2026-09-04**, usando l'app:
 
-- [ ] `todo` — **Preview grande della foto dell'etichetta.** Oggi ci sono la miniatura in tabella
-  (`LabelThumbnail`) e le due foto A/B nell'ispettore, tutte piccole: manca il modo di vederne una
-  a dimensione piena. *Da decidere con Gabriel:* clic sulla foto che apre un popover ingrandito,
-  oppure la foto del lato in uso mostrata accanto al deck — come il disco sul piatto. La seconda
-  costa più spazio in una fascia che deve restare alta il meno possibile.
+- [~] `in-progress` — **Foto dell'etichetta accanto al deck.** Deciso da Gabriel il 2026-09-05:
+  la foto sta **sotto il titolo del brano, nella colonna del deck, e piccola**. Il clic la apre in
+  un popover a dimensione piena — l'obiettivo originale del task era proprio vederla grande, e la
+  sola miniatura sul deck non lo darebbe.
+- [ ] `todo` — **Copertina da Discogs all'import.** Chiesto da Gabriel il 2026-09-05: appena un
+  brano arriva da YouTube, l'app cerca su Discogs e, **se i risultati sono più d'uno, lo fa
+  scegliere**; con un solo risultato lo applica da sé. Serve un token personale Discogs, che
+  Gabriel incolla nelle impostazioni dell'app — ed è il motivo per cui il confine «nessun account»
+  di `CLAUDE.md` si sposta, con la nota relativa
 - [ ] `todo` — **Disposizione dei deck commutabile**: oltre agli attuali due deck impilati
   (orizzontale su due righe), poterli affiancare su **due colonne**, waveform sempre orizzontali.
   Preferenza salvata, di default resta l'impilata. Il compromesso è scritto nei vincoli di

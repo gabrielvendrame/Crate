@@ -8,7 +8,8 @@ import SwiftUI
 /// la farà il mixer del club. Quello che serve è sentire come legano due pezzi e a che volume
 /// relativo.
 struct MixerStrip: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
 
     var body: some View {
         @Bindable var model = model

@@ -3,7 +3,7 @@ import SwiftUI
 
 @main
 struct CrateApp: App {
-    @State private var model = AppModel()
+    private var model: AppModel { .shared }
 
     /// I comandi di menu non possono usare `@Bindable`, che vive dentro un `body` di vista: i
     /// due binding si costruiscono a mano sul modello.
@@ -15,10 +15,13 @@ struct CrateApp: App {
         Binding(get: { model.quantizeResolution }, set: { model.quantizeResolution = $0 })
     }
 
+    private var layoutBinding: Binding<AppModel.DeckLayout> {
+        Binding(get: { model.deckLayout }, set: { model.deckLayout = $0 })
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(model)
                 .frame(minWidth: 1100, minHeight: 720)
         }
         .windowToolbarStyle(.unified)
@@ -32,6 +35,17 @@ struct CrateApp: App {
             CommandGroup(after: .sidebar) {
                 Button("Mostra ispettore") { model.isInspectorPresented.toggle() }
                     .keyboardShortcut("i", modifiers: [.command, .option])
+
+                Picker("Disposizione dei deck", selection: layoutBinding) {
+                    ForEach(AppModel.DeckLayout.allCases, id: \.self) { layout in
+                        Text(layout.label).tag(layout)
+                    }
+                }
+
+                Button("Cambia disposizione dei deck") { model.toggleDeckLayout() }
+                    .keyboardShortcut("d", modifiers: [.command, .option])
+
+                Divider()
             }
             CommandMenu("Deck") {
                 Button("Carica sul deck A") {
@@ -72,6 +86,20 @@ struct CrateApp: App {
                     }
                 }
                 .disabled(!model.isQuantizeEnabled)
+
+                Divider()
+
+                Button("Passa all'altro deck") { model.toggleFocusedDeck() }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+            }
+
+            CommandGroup(replacing: .appSettings) {
+                Button("Aggiorna yt-dlp…") { model.isToolsSheetPresented = true }
+            }
+
+            CommandGroup(replacing: .help) {
+                Button("Scorciatoie da tastiera") { model.isShortcutsSheetPresented = true }
+                    .keyboardShortcut("/", modifiers: .command)
             }
         }
     }

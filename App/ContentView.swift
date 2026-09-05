@@ -2,7 +2,8 @@ import SwiftUI
 import DJKit
 
 struct ContentView: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
 
     var body: some View {
         @Bindable var model = model
@@ -43,7 +44,25 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.isImportSheetPresented) {
             ImportSheet()
-                .environment(model)
+        }
+        .sheet(isPresented: $model.isToolsSheetPresented) {
+            ToolsUpdateSheet()
+        }
+        .sheet(isPresented: $model.isShortcutsSheetPresented) {
+            ShortcutsSheet()
+        }
+        .confirmationDialog(
+            deletionTitle,
+            isPresented: Binding(
+                get: { !model.pendingDeletion.isEmpty },
+                set: { if !$0 { model.pendingDeletion = [] } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Elimina", role: .destructive) { model.confirmPendingDeletion() }
+            Button("Annulla", role: .cancel) { model.pendingDeletion = [] }
+        } message: {
+            Text(deletionMessage)
         }
         .alert(
             "Qualcosa non ha funzionato",
@@ -61,6 +80,35 @@ struct ContentView: View {
                 StartupErrorView(message: error)
             }
         }
+    }
+
+    /// **L'eliminazione si conferma sempre**, anche per una traccia sola: porta via un file audio
+    /// che è costato minuti di download, sparisce dal disco e non c'è un annulla. Il messaggio
+    /// dice cosa va via e quanto spazio libera — che è il numero che fa decidere.
+    private var deletionTitle: String {
+        switch model.pendingDeletion.count {
+        case 0: "Eliminare?"
+        case 1: "Eliminare «\(model.pendingDeletion[0].displayName)»?"
+        case let count: "Eliminare \(count) brani?"
+        }
+    }
+
+    private var deletionMessage: String {
+        let bytes = model.pendingDeletionBytes
+        let size = bytes > 0
+            ? ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+            : nil
+
+        var lines = ["Spariscono l'audio scaricato, la waveform, i cue point e le foto dell'etichetta."]
+        if model.pendingDeletion.count > 1 {
+            lines.append(model.pendingDeletion.prefix(6).map(\.displayName).joined(separator: "\n"))
+            if model.pendingDeletion.count > 6 {
+                lines.append("…e altri \(model.pendingDeletion.count - 6).")
+            }
+        }
+        if let size { lines.append("Libera \(size). Non si può annullare.") }
+        else { lines.append("Non si può annullare.") }
+        return lines.joined(separator: "\n\n")
     }
 
     @ViewBuilder

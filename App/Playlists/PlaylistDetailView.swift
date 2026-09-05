@@ -8,7 +8,8 @@ import SwiftUI
 /// annota un set — «qui entra la cassa mentre l'altro esce», «questa attacca sul break» — e
 /// quelle frasi appartengono al *passaggio*, non alla traccia.
 struct PlaylistDetailView: View {
-    @Environment(AppModel.self) private var model
+    /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
+    @MainActor private var model: AppModel { .shared }
     let playlistID: String
 
     @State private var entries: [PlaylistEntry] = []

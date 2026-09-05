@@ -18,12 +18,34 @@ enum SidebarSelection: Hashable {
 @MainActor
 @Observable
 final class AppModel {
+    /// **L'unica istanza, raggiunta direttamente dalle viste invece che dall'`environment`.**
+    ///
+    /// Non è una scorciatoia: `@Environment(AppModel.self)` in questa app **fa cadere il
+    /// processo**, e per un motivo strutturale. Su macOS diversi pezzi di interfaccia vivono in
+    /// una `NSHostingView` propria — la toolbar, l'ispettore, i fogli, i popover — e quando uno di
+    /// quei pezzi scrive nel modello, SwiftUI rivaluta il `body` del proprietario **dentro
+    /// l'hosting view secondaria**, dove l'ambiente iniettato alla radice della scena non c'è.
+    /// Il property wrapper allora chiama `fatalError`, e non c'è modo di intercettarlo.
+    ///
+    /// Misurato: bastava scrivere un carattere nel campo di ricerca in toolbar. Reiniettare
+    /// `.environment(model)` sui contenuti ospitati copre un caso alla volta e ne lascia scoperti
+    /// altri — è la toppa che era già stata messa all'ispettore il 2026-09-04, e che qui non
+    /// bastava più. Con un riferimento diretto il problema non esiste: l'osservazione di
+    /// `@Observable` funziona sulla **lettura della proprietà**, non su come si è ottenuto
+    /// l'oggetto, quindi le viste continuano ad aggiornarsi come prima.
+    ///
+    /// Il prezzo è che il modello non è più sostituibile per una preview o un test di interfaccia.
+    /// In questo progetto non è un prezzo: i test coprono la logica in `DJKit`, e di preview non
+    /// ce ne sono.
+    static let shared = AppModel()
+
     private(set) var paths: LibraryPaths?
     private(set) var database: AppDatabase?
     private(set) var tracks: TrackRepository?
     private(set) var playlists: PlaylistRepository?
     private(set) var importQueue: ImportQueue?
     private(set) var analyzer: TrackAnalyzer?
+    private(set) var toolLocator: ToolLocator?
     /// Il grafo audio. `nil` solo se l'uscita non si è potuta configurare: in quel caso la
     /// libreria resta usabile e sono i deck a restare muti.
     private(set) var audioGraph: AudioGraph?
@@ -52,6 +74,40 @@ final class AppModel {
 
     private var storedDeckBarHeight: Double =
         UserDefaults.standard.object(forKey: "deckBarHeight") as? Double ?? 400
+
+    /// Come stanno i due deck nella fascia.
+    ///
+    /// **L'impilata resta il predefinito**, e non è una preferenza estetica: affiancandoli ogni
+    /// waveform ha metà larghezza, cioè metà della risoluzione temporale che serve proprio per
+    /// decidere dove attaccare. L'alternativa esiste perché l'ha chiesta Gabriel il 2026-09-04,
+    /// non perché sia equivalente. Le waveform restano orizzontali in tutti e due i casi.
+    enum DeckLayout: String, CaseIterable {
+        case stacked
+        case sideBySide
+
+        var label: String {
+            switch self {
+            case .stacked: "Impilati"
+            case .sideBySide: "Affiancati"
+            }
+        }
+    }
+
+    var deckLayout: DeckLayout {
+        get { storedDeckLayout }
+        set {
+            storedDeckLayout = newValue
+            UserDefaults.standard.set(newValue.rawValue, forKey: "deckLayout")
+        }
+    }
+
+    private var storedDeckLayout: DeckLayout =
+        UserDefaults.standard.string(forKey: "deckLayout")
+            .flatMap(DeckLayout.init(rawValue:)) ?? .stacked
+
+    func toggleDeckLayout() {
+        deckLayout = deckLayout == .stacked ? .sideBySide : .stacked
+    }
 
     /// Posizione del crossfader: 0 tutto sul deck A, 1 tutto sul B, 0,5 entrambi.
     ///
@@ -112,10 +168,15 @@ final class AppModel {
     var transientError: String?
 
     var trackList: [Track] = []
+    /// Ricerca e sottoinsieme scelti nella libreria. Il testo lo scrive `.searchable`, il
+    /// sottoinsieme il menu del filtro.
+    var libraryFilter = LibraryFilter()
     var playlistList: [Playlist] = []
     var selection: SidebarSelection? = .library
     var selectedTrackIDs: Set<String> = []
     var isImportSheetPresented = false
+    var isToolsSheetPresented = false
+    var isShortcutsSheetPresented = false
     var isInspectorPresented = true
     /// Tracce su cui è in corso un ricalcolo manuale della waveform.
     private(set) var analyzingTrackIDs: Set<String> = []
@@ -131,6 +192,7 @@ final class AppModel {
             let trackRepository = TrackRepository(database: database)
             let locator = ToolLocator(paths: paths)
 
+            self.toolLocator = locator
             self.paths = paths
             self.database = database
             self.tracks = trackRepository
@@ -144,7 +206,7 @@ final class AppModel {
             )
             startObserving(database: database)
         } catch {
-            startupError = String(describing: error)
+            startupError = Self.describe(error)
         }
 
         if let paths, let tracks {
@@ -162,14 +224,13 @@ final class AppModel {
             deckA.attach(engine: graph.makeDeck())
             deckB.attach(engine: graph.makeDeck())
         } catch {
-            transientError = (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
+            transientError = Self.describe(error)
         }
 
         applyQuantizeToDecks()
 
-        keyMonitor = DeckKeyMonitor { [weak self] slot, isDeleting in
-            self?.handleHotCueKey(slot: slot, deleting: isDeleting)
+        keyMonitor = DeckKeyMonitor { [weak self] action, phase, isShifted in
+            self?.handle(action, phase: phase, isShifted: isShifted)
         }
         keyMonitor?.install()
     }
@@ -180,7 +241,9 @@ final class AppModel {
         observers.append(
             tracks.observeAllTracks().start(
                 in: database.reader,
-                onError: { [weak self] error in self?.transientError = String(describing: error) },
+                onError: { [weak self] error in
+                    self?.transientError = "La libreria non si aggiorna: \(Self.describe(error))"
+                },
                 onChange: { [weak self] value in
                     self?.trackList = value
                     // I deck tengono una copia della traccia caricata: senza questa riga
@@ -194,7 +257,9 @@ final class AppModel {
         observers.append(
             playlists.observeAllPlaylists().start(
                 in: database.reader,
-                onError: { [weak self] error in self?.transientError = String(describing: error) },
+                onError: { [weak self] error in
+                    self?.transientError = "Le scalette non si aggiornano: \(Self.describe(error))"
+                },
                 onChange: { [weak self] value in self?.playlistList = value }
             )
         )
@@ -205,6 +270,12 @@ final class AppModel {
     var selectedPlaylist: Playlist? {
         guard case .playlist(let id) = selection else { return nil }
         return playlistList.first { $0.id == id }
+    }
+
+    /// La libreria come la vede la tabella: filtrata, non ordinata — l'ordinamento è della
+    /// vista, che ha le sue intestazioni di colonna.
+    var filteredTracks: [Track] {
+        libraryFilter.apply(to: trackList)
     }
 
     /// L'ispettore lavora su una traccia sola: con selezione multipla non mostra nulla.
@@ -243,16 +314,42 @@ final class AppModel {
         }
     }
 
+    /// Le tracce che una conferma di eliminazione sta aspettando. Vuoto = nessuna conferma
+    /// aperta.
+    ///
+    /// **L'eliminazione si conferma sempre**, anche per una traccia sola: porta via un file audio
+    /// che è costato minuti di download, e non c'è un annulla — il file sparisce dal disco.
+    var pendingDeletion: [Track] = []
+
+    func requestDeletion(of trackIDs: Set<String>) {
+        let ordered = trackList.filter { trackIDs.contains($0.id) }
+        guard !ordered.isEmpty else { return }
+        pendingDeletion = ordered
+    }
+
+    func requestDeletion(of track: Track) {
+        pendingDeletion = [track]
+    }
+
+    /// Quanto spazio su disco libera l'eliminazione in attesa: è il numero che fa decidere.
+    var pendingDeletionBytes: Int64 {
+        guard let paths else { return 0 }
+        return pendingDeletion.reduce(0) { total, track in
+            total + Self.fileSizes(of: track, paths: paths).reduce(0, +)
+        }
+    }
+
+    func confirmPendingDeletion() {
+        let tracks = pendingDeletion
+        pendingDeletion = []
+        for track in tracks { deleteTrack(track) }
+    }
+
     /// Elimina la traccia e i file che le appartengono. I cue point spariscono a cascata dal
     /// database; audio, peaks e foto vanno rimossi a mano perché stanno sul disco.
     func deleteTrack(_ track: Track) {
         guard let tracks, let paths else { return }
-        let filesToRemove = [
-            track.audioFilename.map { paths.audioURL(filename: $0) },
-            track.peaksFilename.map { paths.peaksURL(filename: $0) },
-            track.labelImageAFilename.map { paths.artworkURL(filename: $0) },
-            track.labelImageBFilename.map { paths.artworkURL(filename: $0) },
-        ].compactMap(\.self)
+        let filesToRemove = Self.fileURLs(of: track, paths: paths)
 
         Task {
             do {
@@ -264,9 +361,35 @@ final class AppModel {
                     try? FileManager.default.removeItem(at: url)
                 }
             } catch {
-                transientError = "Eliminazione non riuscita: \(error.localizedDescription)"
+                transientError = "Eliminazione non riuscita: \(Self.describe(error))"
             }
         }
+    }
+
+    /// Tutti i file che appartengono a una traccia: audio, cache dei peaks e le due foto.
+    private static func fileURLs(of track: Track, paths: LibraryPaths) -> [URL] {
+        [
+            track.audioFilename.map { paths.audioURL(filename: $0) },
+            track.peaksFilename.map { paths.peaksURL(filename: $0) },
+            track.labelImageAFilename.map { paths.artworkURL(filename: $0) },
+            track.labelImageBFilename.map { paths.artworkURL(filename: $0) },
+        ].compactMap(\.self)
+    }
+
+    private static func fileSizes(of track: Track, paths: LibraryPaths) -> [Int64] {
+        fileURLs(of: track, paths: paths).compactMap { url in
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+            return values?.fileSize.map(Int64.init)
+        }
+    }
+
+    /// Il messaggio da mostrare per un errore.
+    ///
+    /// `String(describing:)` su un errore di GRDB stampa la struttura interna del tipo — utile a
+    /// chi legge un log, illeggibile in un avviso. `errorDescription` è la frase scritta apposta,
+    /// e i nostri errori ce l'hanno tutti.
+    static func describe(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
     // MARK: - Deck
@@ -288,12 +411,58 @@ final class AppModel {
         focusedDeckSlot = slot
     }
 
-    private func handleHotCueKey(slot: Int, deleting: Bool) {
+    /// Il deck che ha il fuoco cambia, e con lui a chi parlano i tasti.
+    func toggleFocusedDeck() {
+        focusedDeckSlot = focusedDeckSlot == .a ? .b : .a
+    }
+
+    /// Quale deck ha chiesto di aprire l'editor della griglia. La fascia dei deck lo osserva e
+    /// apre il popover; azzerarlo subito dopo è compito suo.
+    var gridEditorRequest: DeckState.Slot?
+
+    /// Traduce un tasto in un comando del deck attivo.
+    ///
+    /// Sta qui e non nel monitor perché il monitor conosce solo la tastiera: quale deck sia
+    /// quello attivo, e cosa significhi «nudge» per lui, lo sa il modello.
+    private func handle(_ action: DeckKeyMonitor.Action, phase: DeckKeyMonitor.Phase, isShifted: Bool) {
         let deck = deck(focusedDeckSlot)
-        if deleting {
-            deck.deleteHotCue(slot: slot)
-        } else {
-            deck.pressHotCue(slot: slot)
+
+        switch action {
+        case .hotCue(let slot):
+            guard phase == .down else { return }
+            if isShifted { deck.deleteHotCue(slot: slot) } else { deck.pressHotCue(slot: slot) }
+
+        case .togglePlay:
+            guard phase == .down else { return }
+            deck.togglePlay()
+
+        case .cue:
+            switch phase {
+            case .down: deck.pressCue()
+            case .held: break
+            case .up: deck.releaseCue()
+            }
+
+        case .nudge(let forward):
+            // Un colpo alla pressione, la spinta quando il tasto resta giù: gli stessi due gesti
+            // del pulsante, che sono i due modi diversi di mettere in fase.
+            switch phase {
+            case .down: deck.nudge(forward: forward)
+            case .held: deck.startBend(forward: forward)
+            case .up: deck.endBend()
+            }
+
+        case .switchDeck:
+            guard phase == .down else { return }
+            toggleFocusedDeck()
+
+        case .beatgrid:
+            guard phase == .down else { return }
+            gridEditorRequest = focusedDeckSlot
+
+        case .zoom(let closer):
+            guard phase == .down else { return }
+            deck.zoom(byFactor: closer ? 2 : 0.5)
         }
     }
 
@@ -357,6 +526,52 @@ final class AppModel {
         }
     }
 
+    // MARK: - Aggiornamento di yt-dlp
+
+    /// A che punto è l'aggiornamento di yt-dlp.
+    ///
+    /// Serve uno stato e non un semplice booleano: il download è di 124 MB e dura un minuto, e
+    /// senza il progresso l'unica cosa che si può mostrare è una rotella che non dice niente.
+    enum ToolsUpdateState: Equatable {
+        case idle
+        case running(Double)
+        case succeeded(String)
+        case failed(String)
+    }
+
+    private(set) var toolsUpdateState: ToolsUpdateState = .idle
+    /// La versione che si sta usando adesso, chiesta al binario stesso.
+    private(set) var installedYtDlpVersion: String?
+
+    func refreshInstalledYtDlpVersion() {
+        guard let toolLocator else { return }
+        Task {
+            installedYtDlpVersion = await ToolsUpdater.installedVersion(locator: toolLocator)
+        }
+    }
+
+    /// Scarica l'ultima release di yt-dlp e la installa fra gli strumenti aggiornati.
+    ///
+    /// Serve più spesso di quanto sembri: YouTube cambia e la copia impacchettata smette di
+    /// scaricare, di solito con un errore che non dice che è colpa della versione.
+    func updateYtDlp() {
+        guard let paths else { return }
+        if case .running = toolsUpdateState { return }
+
+        toolsUpdateState = .running(0)
+        Task {
+            do {
+                let result = try await ToolsUpdater(paths: paths).update { fraction in
+                    Task { @MainActor in self.toolsUpdateState = .running(fraction) }
+                }
+                toolsUpdateState = .succeeded(result.version)
+                refreshInstalledYtDlpVersion()
+            } catch {
+                toolsUpdateState = .failed(Self.describe(error))
+            }
+        }
+    }
+
     // MARK: - Foto delle etichette
 
     func setLabelImage(contentsOf url: URL, side: VinylSide, for track: Track) {
@@ -404,7 +619,7 @@ final class AppModel {
             }
             save(track: updated)
         } catch {
-            transientError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            transientError = Self.describe(error)
         }
     }
 
