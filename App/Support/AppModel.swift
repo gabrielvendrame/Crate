@@ -356,6 +356,14 @@ final class AppModel {
         return playlistList.first { $0.id == id }
     }
 
+    /// L'ispettore riguarda **una traccia**, e in una scaletta non c'è una traccia selezionata:
+    /// il pulsante in toolbar e ⌥⌘I lì non facevano niente, che è peggio che non esserci —
+    /// segnalato da Gabriel il 2026-09-06. Libreria e vista di un tag sì, scaletta no.
+    var showsInspector: Bool {
+        if case .playlist = selection { return false }
+        return true
+    }
+
     var selectedTag: Tag? {
         guard case .tag(let id) = selection else { return nil }
         return tagList.first { $0.id == id }
@@ -505,6 +513,15 @@ final class AppModel {
         focusedDeckSlot = focusedDeckSlot == .a ? .b : .a
     }
 
+    /// ⌘F chiede il fuoco al campo di ricerca. Un segnale e non un `FocusState` condiviso: il
+    /// campo vive nella libreria, il comando nel menu, e i due si parlano dal modello — come fa
+    /// già `gridEditorRequest` con l'editor della griglia.
+    var searchFocusRequest = false
+
+    /// Quando è cominciata la spinta da tastiera, per deck: al rilascio serve a sapere quanto la
+    /// spinta ha già spostato, e quindi quanto manca al colpetto.
+    private var bendStartedAt: [DeckState.Slot: Date] = [:]
+
     /// Quale deck ha chiesto di aprire l'editor della griglia. La fascia dei deck lo osserva e
     /// apre il popover; azzerarlo subito dopo è compito suo.
     var gridEditorRequest: DeckState.Slot?
@@ -533,12 +550,22 @@ final class AppModel {
             }
 
         case .nudge(let forward):
-            // Un colpo alla pressione, la spinta quando il tasto resta giù: gli stessi due gesti
-            // del pulsante, che sono i due modi diversi di mettere in fase.
+            // **La spinta parte al tasto premuto**, come sul pulsante: aspettare la ripetizione
+            // automatica del sistema voleva dire mezzo secondo di ritardo, e una spinta che
+            // arriva in ritardo non serve a niente. Il colpetto è il minimo che `endBend`
+            // completa al rilascio, quindi i due gesti non si contendono più il tasto.
             switch phase {
-            case .down: deck.nudge(forward: forward)
-            case .held: deck.startBend(forward: forward)
-            case .up: deck.endBend()
+            case .down:
+                bendStartedAt[focusedDeckSlot] = Date()
+                deck.startBend(forward: forward)
+            case .held:
+                break
+            case .up:
+                let started = bendStartedAt.removeValue(forKey: focusedDeckSlot)
+                deck.endBend(
+                    forward: forward,
+                    heldFor: started.map { Date().timeIntervalSince($0) } ?? 0
+                )
             }
 
         case .switchDeck:
@@ -977,11 +1004,23 @@ final class AppModel {
 
     // MARK: - Scalette
 
-    func createPlaylist() {
+    /// Chiede il nome della scaletta prima di crearla. Lo mostra la barra laterale, che c'è
+    /// sempre: il comando può arrivare dal suo pulsante o da ⇧⌘N nel menu.
+    var isNamingNewPlaylist = false
+
+    /// Crea la scaletta col nome scelto e ci entra dentro.
+    ///
+    /// **Il nome si chiede prima**, invece di creare «Nuova scaletta» e lasciarla da rinominare:
+    /// una scaletta nasce perché si ha in testa una serata o un giro di dischi, quindi il nome
+    /// c'è già — e rinominare dopo è un secondo gesto che si finisce per non fare, lasciando in
+    /// barra laterale due righe che si chiamano uguale. Segnalato da Gabriel il 2026-09-06.
+    func createPlaylist(named name: String) {
         guard let playlists else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = trimmed.isEmpty ? "Scaletta senza nome" : trimmed
         Task {
             do {
-                let playlist = try await playlists.createPlaylist(name: "Nuova scaletta")
+                let playlist = try await playlists.createPlaylist(name: finalName)
                 selection = .playlist(playlist.id)
             } catch {
                 transientError = "Creazione non riuscita: \(error.localizedDescription)"

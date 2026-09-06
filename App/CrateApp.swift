@@ -29,12 +29,21 @@ struct CrateApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Aggiungi da YouTube…") { model.isImportSheetPresented = true }
                     .keyboardShortcut("n", modifiers: .command)
-                Button("Nuova scaletta") { model.createPlaylist() }
+                Button("Nuova scaletta") { model.isNamingNewPlaylist = true }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
             CommandGroup(after: .sidebar) {
                 Button("Mostra ispettore") { model.isInspectorPresented.toggle() }
                     .keyboardShortcut("i", modifiers: [.command, .option])
+                    .disabled(!model.showsInspector)
+
+                // ⌘F la dava `.searchable`, che è stato tolto perché il suo campo finiva sopra
+                // l'ispettore: la scorciatoia va rifatta a mano.
+                Button("Cerca in libreria") {
+                    model.selection = model.showsInspector ? model.selection : .library
+                    model.searchFocusRequest = true
+                }
+                .keyboardShortcut("f", modifiers: .command)
 
                 Picker("Disposizione dei deck", selection: layoutBinding) {
                     ForEach(AppModel.DeckLayout.allCases, id: \.self) { layout in

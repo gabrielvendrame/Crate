@@ -8,8 +8,11 @@ import SwiftUI
 /// la fase senza lo schiocco che dà il salto, ed è quello che serve a orecchio, mentre le due
 /// tracce suonano.
 ///
-/// La distinzione è a tempo: sotto un quarto di secondo è un colpetto, oltre è una spinta. Il
-/// ritardo prima che la spinta parta non si nota, perché una spinta la si tiene comunque.
+/// **La spinta parte all'istante**, e i due gesti non si contendono più il tasto: prima si
+/// aspettava un quarto di secondo per capire quale dei due fosse, e quel ritardo si sentiva —
+/// segnalato da Gabriel il 2026-09-06. Adesso preme e accelera; il colpetto è il **minimo
+/// garantito** che `DeckState.endBend(forward:heldFor:)` completa al rilascio se la spinta è
+/// durata troppo poco per spostare altrettanto.
 struct NudgeButton: View {
     enum Direction {
         case backward
@@ -25,14 +28,13 @@ struct NudgeButton: View {
 
     let direction: Direction
     let isEnabled: Bool
-    let onTap: () -> Void
     let onBendStart: () -> Void
-    let onBendEnd: () -> Void
+    /// Riceve quanto è durata la pressione: serve a sapere quanto la spinta ha già spostato.
+    let onBendEnd: (Double) -> Void
 
-    private static let holdThreshold = Duration.milliseconds(250)
     private static let cornerRadius: CGFloat = 4
 
-    @State private var holdTask: Task<Void, Never>?
+    @State private var pressedAt: Date?
     @State private var isBending = false
 
     var body: some View {
@@ -50,29 +52,22 @@ struct NudgeButton: View {
             .opacity(isEnabled ? 1 : 0.4)
             .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
             .gesture(gesture)
-            .help(isEnabled ? "Un colpetto sposta di poco · tieni premuto per spingere" : "Nessun audio caricato")
+            .help(isEnabled ? "Preme e spinge subito · un tocco vale un colpetto di 10 ms" : "Nessun audio caricato")
     }
 
     private var gesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { _ in
-                guard isEnabled, holdTask == nil, !isBending else { return }
-                holdTask = Task { @MainActor in
-                    try? await Task.sleep(for: Self.holdThreshold)
-                    guard !Task.isCancelled else { return }
-                    isBending = true
-                    onBendStart()
-                }
+                guard isEnabled, !isBending else { return }
+                pressedAt = Date()
+                isBending = true
+                onBendStart()
             }
             .onEnded { _ in
-                holdTask?.cancel()
-                holdTask = nil
-                if isBending {
-                    isBending = false
-                    onBendEnd()
-                } else if isEnabled {
-                    onTap()
-                }
+                guard isBending else { return }
+                isBending = false
+                onBendEnd(Date().timeIntervalSince(pressedAt ?? Date()))
+                pressedAt = nil
             }
     }
 }

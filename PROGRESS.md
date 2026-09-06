@@ -209,10 +209,10 @@ Chiesti da Gabriel il **2026-09-04**, usando l'app:
 
 ---
 
-## M8 — Chiesto da Gabriel il 2026-09-05 · **in-progress**
+## M8 — Chiesto da Gabriel il 2026-09-05 · **done**
 
-Tre richieste arrivate insieme, in ordine di quanto sono definite. **Le prime due sono chiuse**;
-la terza va discussa prima di partire.
+Tre richieste arrivate insieme. **Le prime due sono fatte, la terza è stata scartata da Gabriel il
+2026-09-06.**
 
 ### 1. Salto di 8 · 16 · 32 · 64 battute — **done**
 
@@ -309,38 +309,52 @@ compare solo quando un tag c'è.
 - [x] `done` — `Scripts/ui-mouse.swift` sa fare il **clic destro**: senza, i menu contestuali —
   cioè dove stanno i comandi dei tag — non si potevano provare
 
-### 3. Riconoscere il disco dalla videocamera → Discogs → scaricare l'album — `todo`, da decidere
+### 3. Riconoscere il disco dalla videocamera — **scartato**
 
-**Si può fare, ed è tre cose separate.** Ognuna è utile da sola, e conviene farle in
-quest'ordine perché ognuna verifica la precedente.
-
-**a. Leggere il disco inquadrato.** `AVCaptureSession` c'è già (`CameraController`, M7). Due
-strade, e la seconda è quella buona:
-- OCR dell'etichetta con `VNRecognizeTextRequest`: legge artista, titolo e **numero di catalogo**.
-  Su un'etichetta ferma e ben illuminata funziona; su una inclinata o che gira, no.
-- **Codice a barre della copertina** con `VNDetectBarcodesRequest`: molto più affidabile, perché è
-  un identificatore esatto invece di testo da interpretare. I dischi dagli anni '80 in poi ce
-  l'hanno quasi tutti; quelli prima no, e lì serve l'OCR del numero di catalogo.
-
-**b. Da lì a Discogs.** È la parte già pronta: `DiscogsClient` esiste. Le API accettano
-`barcode=` e `catno=`, che sono ricerche **esatte** — molto più precise del testo libero che
-usiamo oggi. Serve una chiamata in più, `GET /releases/{id}`, per avere la **tracklist**, che oggi
-non leggiamo: `DiscogsRelease` tiene solo ciò che serve a scegliere una copertina.
-
-**c. Scaricare i brani da YouTube.** yt-dlp sa cercare (`ytsearch1:"artista titolo"`), quindi
-meccanicamente si fa. **Il punto debole è l'abbinamento**, non il download: per un pezzo di
-un'edizione precisa YouTube restituisce spesso una versione live, un edit o un remix con lo stesso
-titolo. Va fatto con una schermata di conferma — la tracklist da Discogs a sinistra, il candidato
-trovato con durata e canale a destra, e la durata di Discogs come primo controllo automatico
-(scarta ciò che diverge di più di qualche secondo). Scaricare venti tracce senza guardarle
-significa riempire la libreria di roba da ributtare via, e ogni download costa minuti.
-
-**Da decidere con Gabriel prima di partire:** se gli interessa davvero l'album intero o solo il
-riconoscimento del disco che ha in mano per ritrovarlo/etichettarlo. Il punto (a) + (b) da solo —
-inquadra il disco, l'app ti dice cos'è e ti riempie i metadati — è molto meno lavoro e forse è già
-il 90% del valore.
+**Fuori scope dal 2026-09-06, per decisione di Gabriel: non si fa e non si rimette in
+discussione.** Era la fattibilità di inquadrare l'etichetta, riconoscerla con il codice a barre o
+l'OCR, chiedere a Discogs e scaricare l'album da YouTube. Il pezzo che serviva davvero — che
+scegliendo l'edizione su Discogs arrivi anche il nome dell'album — è stato fatto in M8.2 per altra
+via, senza videocamera.
 
 ---
+
+## M9 — Rifiniture chieste da Gabriel il 2026-09-06 · **done**
+
+Cinque cose viste usando l'app, tutte chiuse.
+
+- [x] `done` — **I tag si vedono in tabella e in scaletta.** Colonna «Tag» nella libreria, che
+  compare solo quando un tag esiste — chi non li usa non deve trovarsi una colonna vuota — e
+  pastiglie sulla riga dell'artista in scaletta, dove lo spazio verticale decide quanti pezzi si
+  vedono insieme. Un tipo solo (`TagPills`) per tutti e due, col nome dentro la pastiglia e non
+  solo il colore: oltre i tre o quattro tag un pallino non si distingue più
+- [x] `done` — **La spinta del nudge parte all'istante.** Prima si aspettava un quarto di secondo
+  col mouse e la ripetizione automatica del sistema da tastiera — mezzo secondo — per distinguere
+  il colpetto dalla spinta, e il ritardo si sentiva. Adesso preme e accelera; **il colpetto è il
+  minimo garantito**, completato al rilascio da `endBend(forward:heldFor:)` con quello che manca ai
+  10 ms, contando quanto la spinta ha già spostato. Nessuna soglia da spiegare: a ±3% la spinta
+  copre i 10 ms in un terzo di secondo, e da lì in poi non c'è più niente da aggiungere. In pausa
+  la spinta non sposta niente, quindi lì il colpetto vale pieno
+- [x] `done` — **La ricerca non sta più sopra l'ispettore.** `.searchable` su macOS mette il campo
+  nella toolbar unificata, che si estende sopra la colonna dell'ispettore: il campo finiva sopra i
+  metadati. Ora è una barra sopra la tabella, larga quanto lei — lo stesso rimedio della riga di
+  riassunto in cima alla scaletta. ⌘F la dava `.searchable`, quindi è rifatta a mano
+- [x] `done` — **La scaletta chiede il nome prima di nascere**, invece di chiamarsi «Nuova
+  scaletta» e restare da rinominare: il nome c'è già in testa quando la si crea, e rinominare dopo
+  è un secondo gesto che non si fa — infatti in libreria c'erano due righe chiamate uguale
+- [x] `done` — **Difetto trovato provando, non ipotizzato**: con la spinta che parte alla
+  pressione, il rilascio è ciò che la ferma — ma `DeckKeyMonitor` il `keyUp` lo mandava **solo
+  dopo la fase «tenuto»**, com'era giusto quando la spinta nasceva dalla ripetizione automatica.
+  Un colpetto di tastiera lasciava quindi il deck ad accelerare per sempre. Adesso il rilascio
+  arriva sempre per le azioni che si tengono premute
+- [x] `done` — **Verificato con la misura**: dieci colpetti del tasto X spostano la testina di
+  esattamente 0,1 s e dieci di Z la riportano dov'era; con X tenuto quattro secondi la traccia
+  percorre più strada che senza, e subito dopo torna a percorrerne quanta prima — cioè la spinta
+  si chiude davvero al rilascio. Quanto sia *pronta* al tatto lo dirà Gabriel: è il tipo di cosa
+  che non si misura
+- [x] `done` — **Niente pulsante dell'ispettore dentro una scaletta**: lì non c'è una traccia
+  selezionata, quindi non aveva niente da aprire e restava a non fare nulla. Sparisce dalla
+  toolbar, e ⌥⌘I è disabilitato
 
 ## Ripartenza a freddo
 
@@ -373,6 +387,11 @@ quarto è ambiguo anche a orecchio, e si raddrizza con ÷2 o ×2.
 Da M8.1: **salto di battute**, 8/16/32/64, con i comandi `◀ 16 ▶` nella riga degli hot cue e i
 tasti `,` e `.`. La taglia è per deck e si ricorda; senza griglia i comandi sono spenti; il salto
 passa dal quantize, così non scivola fuori battuta ripetendolo.
+
+Da M9: i tag si vedono **in colonna** nella libreria e sulle righe di scaletta; la spinta del
+nudge parte all'istante e il colpetto è il minimo garantito; la ricerca è una barra sopra la
+tabella e non finisce più sopra l'ispettore; una scaletta chiede il nome prima di nascere; e nelle
+scalette non c'è più il pulsante di un ispettore che lì non esiste.
 
 Da M8.2: **i tag**. Si creano dalla barra laterale o dal menu contestuale di un disco, si mettono
 su una selezione intera o trascinandoci sopra i dischi, si rinominano, si colorano e si riordinano.
@@ -424,6 +443,11 @@ macchina altre app si riprendono il primo piano di continuo, e `open -a` la rial
 affidabile. E `keystroke` di System Events porta avanti un'altra app facendo perdere il fuoco:
 per scrivere serve `ui-type`, per le scorciatoie a tasto nudo `ui-key` — quelle si riconoscono dal
 **codice fisico**, e un evento con stringa unicode ha `keyCode` 0, quindi non scatterebbero.
+
+**Quello che gli strumenti non sanno fare**: i `DragGesture` di SwiftUI non rispondono ai
+trascinamenti sintetici di `ui-mouse` — i fader (pitch, gain, crossfader) e i tasti di nudge col
+mouse non si possono pilotare, e restano da provare a mano. Il drag & drop delle liste invece
+funziona. `ui-mouse rightclick` apre i menu contestuali, che è dove stanno i comandi dei tag.
 
 Le coordinate si prendono dall'albero AX, non misurando i pixel di uno screenshot — e per lo
 stesso motivo **quello che si vede in uno screenshot non è una verifica**: dove esiste una misura
@@ -489,13 +513,13 @@ M3, M4 e M5, e la ripartenza a freddo aggiornata.
 
 ## Prossimo passo
 
-**Da fare**: resta solo **M8.3**, il riconoscimento del disco dalla videocamera, e va **prima
-discusso con Gabriel**: la domanda scritta in fondo alla sua descrizione è se gli serve scaricare
-l'album intero o solo riconoscere il disco che ha in mano per ritrovarlo ed etichettarlo. Il
-punto (a) + (b) da solo — inquadra, l'app ti dice cos'è e ti riempie i metadati — è molto meno
-lavoro, e adesso che l'album arriva già da Discogs quel pezzo è per metà fatto.
+**Non c'è niente in coda.** M8.1, M8.2 e M9 sono chiuse; M8.3 — il riconoscimento del disco dalla
+videocamera — è **scartato da Gabriel il 2026-09-06** e non va rimesso in discussione.
 
-M8.1 e M8.2 sono chiuse: salto di battute, tag, e l'album preso da Discogs.
+Da far provare a Gabriel, che è la parte non automatizzabile: se la **spinta del nudge** adesso
+risponde subito al dito (col mouse i trascinamenti sintetici non arrivano ai `DragGesture`, quindi
+quel tasto lì non si è potuto pilotare), e se il **colpetto** resta comodo com'era — il conto dice
+che vale sempre 10 ms esatti, ma è una cosa che si giudica in fase con l'altro disco.
 
 **Da far provare a Gabriel**, che è la parte non automatizzabile:
 

@@ -12,6 +12,7 @@ struct SidebarView: View {
     @State private var renamingTag: Tag?
     @State private var isCreatingTag = false
     @State private var tagName = ""
+    @State private var playlistName = ""
 
     var body: some View {
         @Bindable var model = model
@@ -68,7 +69,8 @@ struct SidebarView: View {
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 8) {
                 Button {
-                    model.createPlaylist()
+                    playlistName = ""
+                    model.isNamingNewPlaylist = true
                 } label: {
                     // `contentShape` e non solo la `Label`: con `.plain` il bersaglio del clic è
                     // **quello che si vede disegnato**, quindi lo spazio fra l'icona e la parola
@@ -108,6 +110,16 @@ struct SidebarView: View {
             Button("Annulla", role: .cancel) {}
         } message: {
             Text("Un'etichetta tua — «disco», «funky» — per ritrovare i dischi in cassa.")
+        }
+        // Il nome della scaletta si chiede **prima** di crearla. L'avviso sta qui e non nella
+        // vista di dettaglio, perché il comando arriva da due posti — il pulsante qui sotto e
+        // ⇧⌘N dal menu — e la barra laterale è l'unica delle due che c'è sempre.
+        .alert("Nuova scaletta", isPresented: $model.isNamingNewPlaylist) {
+            TextField("Nome", text: $playlistName)
+            Button("Crea") { model.createPlaylist(named: playlistName) }
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            Text("Come si chiama? Il locale, la data, il giro di dischi.")
         }
         .alert("Rinomina il tag", isPresented: renamingBinding) {
             TextField("Nome", text: $tagName)

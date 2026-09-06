@@ -376,16 +376,38 @@ final class DeckState: Identifiable {
         playheadSeconds = engine.positionSeconds
     }
 
-    /// Spinta tenuta: accelera o rallenta finché il tasto resta premuto, senza toccare il fader.
+    /// Spinta: accelera o rallenta finché il tasto resta premuto, senza toccare il fader.
+    ///
+    /// **Parte alla pressione, non dopo una soglia.** Prima si aspettava un quarto di secondo per
+    /// distinguere il colpetto dalla spinta, e tenendo premuto si sentiva il ritardo — segnalato
+    /// da Gabriel il 2026-09-06: una spinta che arriva in ritardo è inservibile, perché la si dà
+    /// guardando le due waveform e si corregge a orecchio mentre dura.
     func startBend(forward: Bool) {
         guard let engine, engine.hasTrack else { return }
         engine.setBend(forward ? DeckEngine.bendRangePercent : -DeckEngine.bendRangePercent)
         isBending = true
     }
 
-    func endBend() {
+    /// Chiude la spinta e, se è stata troppo breve per spostare quanto sposta un colpetto,
+    /// **completa la differenza**.
+    ///
+    /// È così che i due gesti convivono senza una soglia da spiegare: la spinta parte sempre
+    /// subito, e il colpetto diventa il minimo garantito. Il conto è esatto — a ±3% la spinta
+    /// sposta 30 ms ogni secondo, quindi dopo un terzo di secondo ha già spostato i 10 ms del
+    /// colpetto e non c'è più niente da aggiungere. Prima di quel punto si aggiunge solo il
+    /// pezzo che manca, così un tocco veloce vale un colpetto esatto e non uno e mezzo.
+    ///
+    /// **In pausa la spinta non sposta niente** — cambia la velocità di una testina ferma — e
+    /// allora il colpetto vale pieno.
+    func endBend(forward: Bool, heldFor seconds: Double = 0) {
         engine?.clearBend()
         isBending = false
+        guard let engine, engine.hasTrack else { return }
+        let drift = isPlaying ? max(0, seconds) * DeckEngine.bendRangePercent / 100 : 0
+        let remaining = DeckEngine.nudgeSeconds - drift
+        guard remaining > 0 else { return }
+        engine.nudge(bySeconds: forward ? remaining : -remaining)
+        playheadSeconds = engine.positionSeconds
     }
 
     // MARK: - Hot cue

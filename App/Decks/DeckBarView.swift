@@ -196,16 +196,14 @@ private struct DeckStrip: View {
                 NudgeButton(
                     direction: .backward,
                     isEnabled: deck.canPlay,
-                    onTap: { nudge(forward: false) },
                     onBendStart: { bend(forward: false) },
-                    onBendEnd: { deck.endBend() }
+                    onBendEnd: { deck.endBend(forward: false, heldFor: $0) }
                 )
                 NudgeButton(
                     direction: .forward,
                     isEnabled: deck.canPlay,
-                    onTap: { nudge(forward: true) },
                     onBendStart: { bend(forward: true) },
-                    onBendEnd: { deck.endBend() }
+                    onBendEnd: { deck.endBend(forward: true, heldFor: $0) }
                 )
             }
         }
@@ -308,11 +306,6 @@ private struct DeckStrip: View {
         // Anche qui due decimali: è il numero che si confronta con l'altro deck, e un passo di
         // rifinitura vale 0,06 BPM — invisibile arrotondando al decimo.
         return String(format: "%.2f BPM", bpm)
-    }
-
-    private func nudge(forward: Bool) {
-        model.focus(deck.slot)
-        deck.nudge(forward: forward)
     }
 
     private func bend(forward: Bool) {

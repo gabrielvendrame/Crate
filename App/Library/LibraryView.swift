@@ -11,6 +11,7 @@ struct LibraryView: View {
     /// qui fuori.
     @State private var taggingTrackIDs: Set<Track.ID>?
     @State private var newTagName = ""
+    @FocusState private var isSearchFocused: Bool
 
     private var isCreatingTagBinding: Binding<Bool> {
         Binding(
@@ -49,11 +50,13 @@ struct LibraryView: View {
         // guardando», che con la stessa tabella e la stessa toolbar altrimenti non si vedrebbe.
         .navigationTitle(model.selectedTag?.name ?? "Libreria")
         .navigationSubtitle(subtitle)
-        .searchable(
-            text: $model.libraryFilter.text,
-            placement: .toolbar,
-            prompt: "Cerca per titolo, artista o album"
-        )
+        // **Il campo di ricerca sta sopra la tabella, non nella toolbar.** Con `.searchable` su
+        // macOS il campo occupa la destra della toolbar, che è unificata e si estende sopra la
+        // colonna dell'ispettore: il campo finiva letteralmente sopra i metadati della traccia —
+        // segnalato da Gabriel il 2026-09-06. Qui invece è largo quanto la tabella che filtra, e
+        // l'ispettore resta libero. Lo stesso rimedio della riga di riassunto in cima alla
+        // scaletta, per lo stesso motivo.
+        .safeAreaInset(edge: .top, spacing: 0) { searchBar }
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 scopePicker
@@ -109,6 +112,50 @@ struct LibraryView: View {
         return tag.name
     }
 
+    /// La barra di ricerca: campo, croce per svuotarlo e il conto di cosa si sta guardando.
+    private var searchBar: some View {
+        @Bindable var model = model
+
+        return VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextField("Cerca per titolo, artista o album", text: $model.libraryFilter.text)
+                    .textFieldStyle(.plain)
+                    .focused($isSearchFocused)
+
+                if !model.libraryFilter.text.isEmpty {
+                    Button {
+                        model.libraryFilter.text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Svuota la ricerca")
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+
+            Divider()
+        }
+        .background(.bar)
+        // ⌘F porta il fuoco qui: la scorciatoia la dava `.searchable`, e togliendolo va rifatta.
+        // Passa dal modello come già fa il tasto `G` per l'editor della griglia.
+        .onChange(of: model.searchFocusRequest) { _, requested in
+            guard requested else { return }
+            model.searchFocusRequest = false
+            isSearchFocused = true
+        }
+    }
+
     private var scopePicker: some View {
         @Bindable var model = model
 
@@ -135,6 +182,17 @@ struct LibraryView: View {
             }
             TableColumn("Artista", value: \.artist)
             TableColumn("Album", value: \.album)
+
+            // La colonna dei tag c'è **solo quando un tag esiste**: chi non li usa non deve
+            // trovarsi una colonna vuota che ruba larghezza a titolo e artista. Non si ordina
+            // per tag — non stanno nella riga della traccia, e per «vedere solo questi» c'è già
+            // la barra laterale, che è più diretta di un ordinamento.
+            if !model.tagList.isEmpty {
+                TableColumn("Tag") { track in
+                    TagPills(track: track)
+                }
+                .width(min: 60, ideal: 130)
+            }
 
             TableColumn("BPM") { track in
                 Text(track.bpm.map { String(format: "%.1f", $0) } ?? "—")

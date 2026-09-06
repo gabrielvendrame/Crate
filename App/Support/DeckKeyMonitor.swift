@@ -152,11 +152,14 @@ final class DeckKeyMonitor {
         if !isDown {
             // Il rilascio si manda solo se la pressione era stata presa da noi: altrimenti si
             // fermerebbe un'anteprima che non abbiamo avviato.
-            let wasHeld = held.remove(keyCode) != nil
+            held.remove(keyCode)
             guard pressed.remove(keyCode) != nil else { return false }
             guard Self.isHoldable(action) else { return true }
-            // Senza pressione tenuta non c'è niente da chiudere: un colpo di nudge è già finito.
-            if wasHeld || action == .cue { onAction(action, .up, flags.contains(.shift)) }
+            // **Sempre**, anche per una pressione brevissima. Da quando la spinta del nudge parte
+            // al tasto premuto, il rilascio è ciò che la ferma: mandarlo solo dopo la fase
+            // "tenuto" — come si faceva quando la spinta partiva dalla ripetizione automatica —
+            // lascerebbe il deck ad accelerare per sempre dopo un colpetto.
+            onAction(action, .up, flags.contains(.shift))
             return true
         }
 

@@ -291,11 +291,20 @@ private struct PlaylistTrackRow: View {
                 Text(entry.track?.title ?? "Traccia rimossa dalla libreria")
                     .lineLimit(1)
                     .foregroundStyle(entry.track == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-                if let artist = entry.track?.artist, !artist.isEmpty {
-                    Text(artist)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                // I tag stanno sulla riga dell'artista e non su una loro: in scaletta lo spazio
+                // verticale è quello che decide quanti pezzi si vedono insieme, ed è la cosa che
+                // serve guardare mentre si costruisce un set.
+                HStack(spacing: 6) {
+                    if let artist = entry.track?.artist, !artist.isEmpty {
+                        Text(artist)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    }
+                    if let track = entry.track {
+                        TagPills(track: track, compact: true)
+                    }
                 }
             }
 

@@ -43,11 +43,15 @@ struct ContentView: View {
                 }
                 .help("Aggiungi un brano da un link di YouTube (⌘N)")
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button("Ispettore", systemImage: "sidebar.right") {
-                    model.isInspectorPresented.toggle()
+            // Solo dove un ispettore c'è: dentro una scaletta il pulsante non aveva niente da
+            // aprire e restava lì a non fare nulla.
+            if model.showsInspector {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Ispettore", systemImage: "sidebar.right") {
+                        model.isInspectorPresented.toggle()
+                    }
+                    .help("Mostra o nascondi l'ispettore (⌥⌘I)")
                 }
-                .help("Mostra o nascondi l'ispettore (⌥⌘I)")
             }
         }
         .sheet(isPresented: $model.isImportSheetPresented) {
