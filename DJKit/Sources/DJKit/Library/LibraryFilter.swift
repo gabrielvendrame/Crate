@@ -8,10 +8,18 @@ import Foundation
 public struct LibraryFilter: Equatable, Sendable {
     public var text: String
     public var scope: Scope
+    /// Il tag da cui si guarda la libreria, scelto nella barra laterale. `nil` = tutti.
+    ///
+    /// **Una dimensione a sé e non un quinto caso di `Scope`**, come si era ipotizzato scrivendo
+    /// il task: scope e tag sono ortogonali, e «senza etichetta» *e* «funky» è una domanda che si
+    /// fa davvero — con un picker solo non si potrebbe formulare. Il prezzo è un campo in più
+    /// qui; il guadagno è che i due comandi non si contendono lo stesso stato.
+    public var tagID: String?
 
-    public init(text: String = "", scope: Scope = .all) {
+    public init(text: String = "", scope: Scope = .all, tagID: String? = nil) {
         self.text = text
         self.scope = scope
+        self.tagID = tagID
     }
 
     /// I sottoinsiemi che si vanno davvero a cercare, e nessun altro.
@@ -38,12 +46,24 @@ public struct LibraryFilter: Equatable, Sendable {
     }
 
     public var isActive: Bool {
-        !text.trimmingCharacters(in: .whitespaces).isEmpty || scope != .all
+        !text.trimmingCharacters(in: .whitespaces).isEmpty || scope != .all || tagID != nil
     }
 
-    public func apply(to tracks: [Track]) -> [Track] {
+    /// `tagIDsByTrack` è la mappa dei legami, letta una volta sola: il filtro non ha un database
+    /// da interrogare, e non deve averlo — resta una funzione pura, provata in un secondo.
+    public func apply(
+        to tracks: [Track],
+        tagIDsByTrack: [String: Set<String>] = [:]
+    ) -> [Track] {
         guard isActive else { return tracks }
-        return tracks.filter { matchesScope($0) && matchesText($0) }
+        return tracks.filter {
+            matchesScope($0) && matchesTag($0, tagIDsByTrack: tagIDsByTrack) && matchesText($0)
+        }
+    }
+
+    private func matchesTag(_ track: Track, tagIDsByTrack: [String: Set<String>]) -> Bool {
+        guard let tagID else { return true }
+        return tagIDsByTrack[track.id]?.contains(tagID) ?? false
     }
 
     private func matchesScope(_ track: Track) -> Bool {

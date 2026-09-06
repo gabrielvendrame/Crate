@@ -53,7 +53,7 @@ struct DiscogsPickerSheet: View {
             Text("Copertina per «\(choice.track.displayName)»")
                 .font(.headline)
                 .lineLimit(2)
-            Text("Discogs conosce \(releases.count) edizioni. Scegli quella che hai in mano: diventa la foto dell'etichetta del lato A.")
+            Text("Discogs conosce \(releases.count) edizioni. Scegli quella che hai in mano: diventa la foto dell'etichetta del lato A, e il suo titolo riempie il campo Album.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -83,7 +83,9 @@ struct DiscogsPickerSheet: View {
     private func choose(_ release: DiscogsRelease) {
         isApplying = true
         Task {
-            await model.applyArtwork(release, to: choice.track)
+            // Scelta a mano: da qui l'album si scrive anche sopra a quello che c'era, perché
+            // indicare questa edizione fra dieci è già la conferma di quale disco sia.
+            await model.applyArtwork(release, to: choice.track, chosenByHand: true)
             isApplying = false
             dismiss()
         }

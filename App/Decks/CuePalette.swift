@@ -21,6 +21,18 @@ enum CuePalette {
         SIMD3(0.35, 0.82, 0.30),  // 8 · verde
     ]
 
+    /// Come si chiamano, per il menu che sceglie il colore di un tag: in un menu di macOS un
+    /// pallino colorato da solo non si distingue bene, e «viola» sì.
+    static let names = [
+        "Ciano", "Blu", "Viola", "Magenta", "Arancio rosso", "Arancio", "Giallo", "Verde",
+    ]
+
+    static func name(at index: Int) -> String {
+        guard !names.isEmpty else { return "Colore" }
+        let wrapped = ((index % names.count) + names.count) % names.count
+        return names[wrapped]
+    }
+
     /// I memory cue non hanno uno slot, quindi non hanno un colore proprio: grigio chiaro, più
     /// spento del bianco del cue di lavoro ma abbastanza acceso da vedersi sulla waveform.
     static let memoryCueRGB = SIMD3<Double>(0.75, 0.78, 0.85)

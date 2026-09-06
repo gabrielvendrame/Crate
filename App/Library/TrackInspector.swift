@@ -16,6 +16,11 @@ struct TrackInspector: View {
     @State private var album = ""
     @State private var bpm = ""
     @State private var saveTask: Task<Void, Never>?
+    /// La versione della traccia da cui i campi sono stati riempiti l'ultima volta. Serve a
+    /// distinguere «questo campo non l'ha toccato nessuno» da «lo sta scrivendo adesso».
+    @State private var loaded: Track?
+    @State private var isCreatingTag = false
+    @State private var newTagName = ""
 
     var body: some View {
         Form {
@@ -23,6 +28,33 @@ struct TrackInspector: View {
                 TextField("Titolo", text: $title)
                 TextField("Artista", text: $artist)
                 TextField("Album", text: $album)
+            }
+
+            // Sotto i metadati e sopra l'etichetta: i tag sono la quinta cosa che si guarda di
+            // un disco, dopo i quattro campi, e sono l'unico posto dove si scrive qualcosa che
+            // non viene né da YouTube né da Discogs.
+            Section("Tag") {
+                ForEach(model.tags(of: track)) { tag in
+                    HStack(spacing: 6) {
+                        Image(systemName: "tag.fill")
+                            .foregroundStyle(CuePalette.color(at: tag.colorIndex))
+                        Text(tag.name)
+                        Spacer(minLength: 0)
+                        Button {
+                            model.toggleTag(tag, on: [track.id])
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Togli «\(tag.name)» da questo brano")
+                    }
+                }
+
+                TagMenu(trackIDs: [track.id], title: "Aggiungi un tag") {
+                    newTagName = ""
+                    isCreatingTag = true
+                }
             }
 
             Section("Etichetta") {
@@ -92,7 +124,21 @@ struct TrackInspector: View {
             }
         }
         .formStyle(.grouped)
+        .alert("Nuovo tag", isPresented: $isCreatingTag) {
+            TextField("Nome", text: $newTagName)
+            Button("Crea e assegna") {
+                guard Tag.normalized(name: newTagName) != nil else { return }
+                model.createTag(named: newTagName, andAssignTo: [track.id])
+            }
+            Button("Annulla", role: .cancel) {}
+        }
         .task(id: track.id) { load() }
+        // La riga può cambiare **da fuori** mentre è sotto gli occhi: scegliendo l'edizione su
+        // Discogs arriva il nome dell'album, e l'analisi porta il BPM. Senza questo i campi
+        // restavano quelli di quando la traccia è stata selezionata — e alla prima correzione di
+        // un altro campo il salvataggio avrebbe riscritto sopra l'album appena arrivato, perché
+        // scrive tutti e tre insieme.
+        .onChange(of: track) { _, updated in merge(updated) }
         .onChange(of: title) { scheduleSave() }
         .onChange(of: artist) { scheduleSave() }
         .onChange(of: album) { scheduleSave() }
@@ -100,10 +146,31 @@ struct TrackInspector: View {
 
     private func load() {
         saveTask?.cancel()
+        loaded = track
         title = track.title
         artist = track.artist
         album = track.album
-        bpm = track.bpm.map { String(format: "%.2f", $0) } ?? ""
+        bpm = Self.formatted(track.bpm)
+    }
+
+    /// Porta nei campi ciò che è cambiato in tabella, **lasciando stare quelli che si stanno
+    /// scrivendo**: un campo il cui testo è ancora quello caricato non l'ha toccato nessuno e si
+    /// può aggiornare; uno diverso è lavoro dell'utente e ricaricarlo glielo cancellerebbe sotto
+    /// le dita.
+    private func merge(_ updated: Track) {
+        guard let previous = loaded else {
+            load()
+            return
+        }
+        if title == previous.title { title = updated.title }
+        if artist == previous.artist { artist = updated.artist }
+        if album == previous.album { album = updated.album }
+        if bpm == Self.formatted(previous.bpm) { bpm = Self.formatted(updated.bpm) }
+        loaded = updated
+    }
+
+    private static func formatted(_ bpm: Double?) -> String {
+        bpm.map { String(format: "%.2f", $0) } ?? ""
     }
 
     /// Il campo vuoto toglie la griglia; un numero storto si rifiuta rimettendo quello di prima,
@@ -117,7 +184,7 @@ struct TrackInspector: View {
         guard let value = Double(trimmed.replacingOccurrences(of: ",", with: ".")),
               DeckState.bpmRange.contains(value)
         else {
-            bpm = track.bpm.map { String(format: "%.2f", $0) } ?? ""
+            bpm = Self.formatted(track.bpm)
             return
         }
         model.setBPM(value, for: track)

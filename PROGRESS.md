@@ -211,8 +211,8 @@ Chiesti da Gabriel il **2026-09-04**, usando l'app:
 
 ## M8 — Chiesto da Gabriel il 2026-09-05 · **in-progress**
 
-Tre richieste arrivate insieme, in ordine di quanto sono definite. **La prima è chiusa**, le
-altre due no.
+Tre richieste arrivate insieme, in ordine di quanto sono definite. **Le prime due sono chiuse**;
+la terza va discussa prima di partire.
 
 ### 1. Salto di 8 · 16 · 32 · 64 battute — **done**
 
@@ -246,23 +246,68 @@ altre due no.
   dal menu e ritrovata dopo il riavvio, con A a 64 e B a 16 indipendenti
 - [x] `done` — `swift test --package-path DJKit`: **152 test verdi** · `xcodebuild`: BUILD SUCCEEDED
 
-### 2. Tag ("disco", "funky", …) da configurare e assegnare — `todo`
+### 2. Tag ("disco", "funky", …) da configurare e assegnare — **done**
 
-**Sposta un confine di scope scritto in `CLAUDE.md`**, e va scritto lì quando si fa: i metadati
-erano volutamente quattro — titolo, artista, album, foto — «niente genere, anno, rating». I tag non
-sono un campo fisso in più: sono una dimensione che se la definisce l'utente, e servono a
-ritrovare i dischi. La decisione è di Gabriel del 2026-09-05.
+Sposta un confine di scope scritto in `CLAUDE.md`, ed è annotato lì: i metadati erano volutamente
+quattro. I tag non sono un campo fisso in più — sono una dimensione che se la definisce l'utente.
+Chi non ne crea nessuno ha la libreria di prima, sezione della barra laterale compresa, che
+compare solo quando un tag c'è.
 
-- Schema: migrazione **`v2`** — non toccare la `v1`. Tabella `tag` (`id`, `name`, `colorIndex`,
-  `position`) e tabella ponte `trackTag` (`trackID`, `tagID`, chiave primaria composta, cascata su
-  entrambe). La `position` serve a ordinarli a mano come le scalette.
-- `TagRepository` in `DJKit/Persistence/`, con `ValueObservation` come gli altri.
-- Filtro: `LibraryFilter.Scope` ha già quattro casi; aggiungere `case tag(String)` e ricordarsi che
-  `Scope` è `CaseIterable` — con un caso associato non lo è più, quindi il picker in toolbar va
-  costruito dalla lista dei tag invece che da `allCases`.
-- Assegnazione: menu contestuale della libreria (vale anche su selezione multipla, come
-  «Aggiungi alla scaletta») e una sezione nell'ispettore.
-- Gestione: sezione nella barra laterale sotto le scalette, con rinomina e colore.
+- [x] `done` — Migrazione **`v2-tags`**, a sé e senza toccare la `v1`: tabella `tag`
+  (`id`, `name` con collazione `NOCASE` e indice unico, `colorIndex`, `position`) e ponte
+  `trackTag` con chiave composta e cascata su entrambi i lati. Girata sul database vero di
+  Gabriel, con le 11 tracce al loro posto
+- [x] `done` — `Model/Tag.swift`, `Model/TrackTag.swift`, `Persistence/TagRepository.swift` con
+  `ValueObservation` come gli altri. La creazione è **idempotente** — scrivere due volte «disco»
+  vuol dire volerci mettere quel disco lì, non aprire un errore — mentre la **rinomina** su un
+  nome preso fallisce, o due tag si fonderebbero di nascosto
+- [x] `done` — **Il filtro per tag è una dimensione a sé in `LibraryFilter`, non un quinto caso di
+  `Scope`** come si era ipotizzato scrivendo il task: scope e tag sono ortogonali, e «senza
+  etichetta» *e* «funky» è una domanda che si fa davvero. Il tag si sceglie **nella barra
+  laterale**, che è dove si risponde a «cosa guardo»; il picker in toolbar resta su «in che stato
+  sono». Nessuno dei due deve inseguire l'altro
+- [x] `done` — Assegnazione: sottomenu **Tag** nel menu contestuale della libreria, che vale sulla
+  selezione multipla, con le voci a interruttore — la spunta c'è quando ce l'hanno *tutte*, e
+  premerla in quel caso toglie. Più «Nuovo tag…», che lo crea e lo assegna in un gesto solo
+- [x] `done` — Assegnazione anche **trascinando i dischi sul tag** nella barra laterale, come si
+  fa con le scalette
+- [x] `done` — Sezione nell'ispettore: i tag del disco con la × per toglierli e «Aggiungi un tag»
+- [x] `done` — Gestione nella barra laterale: rinomina, colore (la tavolozza dei cue, riusata),
+  eliminazione, riordino trascinando. Il badge dice quanti dischi porta ognuno
+- [x] `done` — 9 test su `TagRepository` (creazione, idempotenza, collisione di nome, assegnazione
+  multipla, riscrittura in blocco, cascate, riordino) e 3 sul filtro
+
+**Aggiunta chiesta da Gabriel il 2026-09-06: l'album si prende da Discogs.** — **done**
+
+- [x] `done` — `DiscogsRelease.albumTitle`: il titolo di una release è «Artista - Album», quindi si
+  taglia sul **primo** trattino — così «Kölsch - Der Alte - Remixes» non perde metà titolo — e
+  senza trattino il titolo è già l'album, che è come sono catalogate le compilation
+- [x] `done` — `applyArtwork` scrive copertina e album **con un salvataggio solo**, o il secondo
+  ripartirebbe dalla copia vecchia della riga. Scelta a mano dal foglio: l'album si scrive sempre,
+  perché indicare quell'edizione fra dieci è già la conferma. Edizione unica applicata da sola:
+  solo se il campo è vuoto. Senza copertina l'album si scrive lo stesso: il nome del disco è già
+  un guadagno
+- [x] `done` — **Provato per davvero su «Let No Man Put Asunder (Dam Swindle Remix)»**, che non
+  aveva né copertina né album: scelta l'edizione Rams Horn del 1985 fra le dodici, in tabella sono
+  arrivati insieme `album = "Let No Man Put Asunder"` e il file dell'etichetta
+
+**Difetti veri trovati provando l'app, non ipotizzati:**
+
+- [x] `done` — **I pulsanti degli avvisi non si riabilitano.** Il contenuto di un `.alert` su macOS
+  viene costruito quando l'avviso compare e **non si rivaluta**: «Crea» disabilitato sul campo
+  vuoto restava disabilitato anche dopo aver scritto il nome, e l'avviso si chiudeva senza fare
+  niente. La validazione è passata dentro l'azione, che lo stato corrente ce l'ha
+- [x] `done` — **L'ispettore non vedeva l'album arrivato da Discogs**: i campi si riempivano solo
+  al cambio di traccia, quindi restavano quelli di prima — e alla correzione successiva di un
+  altro campo il salvataggio, che scrive i tre insieme, avrebbe **riscritto vuoto** sopra l'album
+  appena arrivato. Ora un cambiamento da fuori entra nei campi che nessuno sta scrivendo
+  (`TrackInspector.merge`), e lascia stare quelli toccati a mano
+- [x] `done` — **Il pulsante in fondo alla barra laterale rispondeva a intermittenza**: con
+  `.buttonStyle(.plain)` il bersaglio del clic è quello che si vede disegnato, e fra l'icona e la
+  parola c'è un buco. `contentShape(Rectangle())` su entrambi — anche su «Nuova scaletta», che
+  aveva lo stesso difetto da prima
+- [x] `done` — `Scripts/ui-mouse.swift` sa fare il **clic destro**: senza, i menu contestuali —
+  cioè dove stanno i comandi dei tag — non si potevano provare
 
 ### 3. Riconoscere il disco dalla videocamera → Discogs → scaricare l'album — `todo`, da decidere
 
@@ -328,6 +373,11 @@ quarto è ambiguo anche a orecchio, e si raddrizza con ÷2 o ×2.
 Da M8.1: **salto di battute**, 8/16/32/64, con i comandi `◀ 16 ▶` nella riga degli hot cue e i
 tasti `,` e `.`. La taglia è per deck e si ricorda; senza griglia i comandi sono spenti; il salto
 passa dal quantize, così non scivola fuori battuta ripetendolo.
+
+Da M8.2: **i tag**. Si creano dalla barra laterale o dal menu contestuale di un disco, si mettono
+su una selezione intera o trascinandoci sopra i dischi, si rinominano, si colorano e si riordinano.
+Selezionandone uno la libreria si guarda da lì, e il filtro di stato in toolbar continua a valere
+insieme. E **il campo Album lo riempie Discogs** quando si sceglie l'edizione della copertina.
 
 Da M7: ricerca in libreria (⌘F) con quattro filtri, eliminazione sempre confermata con lo spazio
 che libera, scorciatoie complete con il CUE tenuto premuto vero (pannello ⌘/), aggiornamento di
@@ -439,11 +489,13 @@ M3, M4 e M5, e la ripartenza a freddo aggiornata.
 
 ## Prossimo passo
 
-**Da fare, in ordine**: M8.1 (salto di battute) è **chiusa** — comandi nella riga degli hot cue,
-tasti `,` e `.`, taglia per deck che si ricorda. Tocca a M8.2 (tag): è chiaro ma tocca lo schema del
-database, quindi va fatto con calma e con la migrazione `v2` scritta bene. M8.3 va **prima discusso
-con Gabriel**: la domanda scritta in fondo alla sua descrizione è se gli serve l'album intero o solo
-il riconoscimento.
+**Da fare**: resta solo **M8.3**, il riconoscimento del disco dalla videocamera, e va **prima
+discusso con Gabriel**: la domanda scritta in fondo alla sua descrizione è se gli serve scaricare
+l'album intero o solo riconoscere il disco che ha in mano per ritrovarlo ed etichettarlo. Il
+punto (a) + (b) da solo — inquadra, l'app ti dice cos'è e ti riempie i metadati — è molto meno
+lavoro, e adesso che l'album arriva già da Discogs quel pezzo è per metà fatto.
+
+M8.1 e M8.2 sono chiuse: salto di battute, tag, e l'album preso da Discogs.
 
 **Da far provare a Gabriel**, che è la parte non automatizzabile:
 

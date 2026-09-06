@@ -90,6 +90,20 @@ struct DiscogsTests {
     }
     """.utf8)
 
+    @Test("L'album esce dal titolo della release, tagliato sul primo trattino")
+    func albumFromTitle() {
+        #expect(DiscogsRelease(id: 1, title: "Kölsch - Speicher 70").albumTitle == "Speicher 70")
+        // Il trattino dentro il titolo resta dov'è: si taglia sul primo, non sull'ultimo.
+        #expect(
+            DiscogsRelease(id: 2, title: "Kölsch - Der Alte - Remixes").albumTitle
+                == "Der Alte - Remixes"
+        )
+        // Senza artista davanti il titolo è già l'album — le compilation sono catalogate così.
+        #expect(DiscogsRelease(id: 3, title: "Speicher 70").albumTitle == "Speicher 70")
+        #expect(DiscogsRelease(id: 4, title: "Kölsch -   ").albumTitle == nil)
+        #expect(DiscogsRelease(id: 5, title: "  ").albumTitle == nil)
+    }
+
     @Test("La risposta di ricerca si legge nei campi che servono")
     func decodesSearchResults() throws {
         let releases = try DiscogsClient.decodeSearch(Self.sample)

@@ -132,7 +132,9 @@ struct ContentView: View {
     @ViewBuilder
     private var detail: some View {
         switch model.selection {
-        case .library, nil:
+        // Un tag è la libreria vista da lì: stessa tabella, stesso ispettore, stessa ricerca —
+        // solo meno righe. Una vista a parte non avrebbe niente di diverso da dire.
+        case .library, .tag, nil:
             LibraryView()
         case .playlist(let id):
             PlaylistDetailView(playlistID: id)

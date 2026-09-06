@@ -37,7 +37,14 @@ Queste sono esclusioni volute. Non aggiungerle "perché sarebbe utile".
   genere, anno, rating, commenti, energy. **Con un'eccezione chiesta da Gabriel il 2026-09-05: i
   tag.** Non sono un campo fisso in più — sono etichette che se le definisce lui («disco»,
   «funky») e servono a ritrovare i dischi in cassa. Il confine resta valido per tutto il resto: i
-  campi fissi restano quattro. Vedi M8.2 in `PROGRESS.md`.
+  campi fissi restano quattro. Fatti in M8.2: tabella `tag` più la ponte `trackTag`, **non** una
+  colonna di testo sulla traccia — un tag rinominato deve restare lo stesso tag su tutti i dischi
+  che lo portano. Il filtro per tag è una **dimensione a sé** in `LibraryFilter`, non un quinto
+  caso di `Scope`: «senza etichetta» *e* «funky» è una domanda che si fa davvero.
+- **Il campo Album lo riempie Discogs**, dal 2026-09-06: scegliendo l'edizione nel foglio delle
+  copertine si prende anche il titolo del disco, che è la seconda metà di ciò che si è appena
+  scelto. Scelta a mano: si scrive sempre. Edizione unica applicata da sola: solo se il campo è
+  vuoto.
 - **Beatgrid a BPM costante** (offset del downbeat + BPM). Niente beatgrid a marker multipli.
 - **Quantize: solo i cue, e uno solo per tutta l'app.** Senza loop non c'è altro da
   quantizzare. Risoluzione **1/1 o 1/2** (scelta di Gabriel del 2026-09-05, dal picker nel mixer;

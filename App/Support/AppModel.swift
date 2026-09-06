@@ -8,6 +8,8 @@ import DJKit
 enum SidebarSelection: Hashable {
     case library
     case playlist(String)
+    /// Un tag scelto nella barra laterale: mostra la libreria vista da lì.
+    case tag(String)
 }
 
 /// Stato condiviso dell'applicazione: database aperto, repository, coda di import e le liste che
@@ -43,6 +45,7 @@ final class AppModel {
     private(set) var database: AppDatabase?
     private(set) var tracks: TrackRepository?
     private(set) var playlists: PlaylistRepository?
+    private(set) var tags: TagRepository?
     private(set) var importQueue: ImportQueue?
     private(set) var analyzer: TrackAnalyzer?
     private(set) var toolLocator: ToolLocator?
@@ -213,7 +216,22 @@ final class AppModel {
     /// sottoinsieme il menu del filtro.
     var libraryFilter = LibraryFilter()
     var playlistList: [Playlist] = []
-    var selection: SidebarSelection? = .library
+    /// I tag esistenti, in ordine di `position`.
+    var tagList: [Tag] = []
+    /// Quali tag porta ogni traccia. Una mappa sola e non una lista per traccia: la tabella la
+    /// interroga mentre disegna, e il filtro per tag la usa a ogni battuta di ricerca.
+    var tagIDsByTrack: [String: Set<String>] = [:]
+    /// Cosa si sta guardando. **La scelta del tag vive qui e non in un secondo comando**: il
+    /// filtro per tag è la stessa domanda che si fa scegliendo la libreria o una scaletta —
+    /// «quali dischi guardo» — mentre il picker in toolbar risponde a «in che stato sono». Tenere
+    /// le due cose in due posti diversi evita di dover sincronizzare due controlli che dicono lo
+    /// stesso.
+    var selection: SidebarSelection? = .library {
+        didSet {
+            guard selection != oldValue else { return }
+            libraryFilter.tagID = if case .tag(let id) = selection { id } else { nil }
+        }
+    }
     var selectedTrackIDs: Set<String> = []
     var isImportSheetPresented = false
     var isSettingsSheetPresented = false
@@ -239,6 +257,7 @@ final class AppModel {
             self.database = database
             self.tracks = trackRepository
             self.playlists = PlaylistRepository(database: database)
+            self.tags = TagRepository(database: database)
             self.analyzer = TrackAnalyzer(paths: paths, repository: trackRepository)
             self.importQueue = ImportQueue(
                 runner: YtDlpRunner(locator: locator),
@@ -283,7 +302,7 @@ final class AppModel {
     }
 
     private func startObserving(database: AppDatabase) {
-        guard let tracks, let playlists else { return }
+        guard let tracks, let playlists, let tags else { return }
 
         observers.append(
             tracks.observeAllTracks().start(
@@ -310,6 +329,24 @@ final class AppModel {
                 onChange: { [weak self] value in self?.playlistList = value }
             )
         )
+        observers.append(
+            tags.observeAllTags().start(
+                in: database.reader,
+                onError: { [weak self] error in
+                    self?.transientError = "I tag non si aggiornano: \(Self.describe(error))"
+                },
+                onChange: { [weak self] value in self?.tagList = value }
+            )
+        )
+        observers.append(
+            tags.observeTagIDsByTrack().start(
+                in: database.reader,
+                onError: { [weak self] error in
+                    self?.transientError = "I tag non si aggiornano: \(Self.describe(error))"
+                },
+                onChange: { [weak self] value in self?.tagIDsByTrack = value }
+            )
+        )
     }
 
     // MARK: - Selezione
@@ -319,10 +356,15 @@ final class AppModel {
         return playlistList.first { $0.id == id }
     }
 
+    var selectedTag: Tag? {
+        guard case .tag(let id) = selection else { return nil }
+        return tagList.first { $0.id == id }
+    }
+
     /// La libreria come la vede la tabella: filtrata, non ordinata — l'ordinamento è della
     /// vista, che ha le sue intestazioni di colonna.
     var filteredTracks: [Track] {
-        libraryFilter.apply(to: trackList)
+        libraryFilter.apply(to: trackList, tagIDsByTrack: tagIDsByTrack)
     }
 
     /// L'ispettore lavora su una traccia sola: con selezione multipla non mostra nulla.
@@ -679,7 +721,7 @@ final class AppModel {
                     return
                 }
                 if releases.count == 1, !showEvenIfSingle {
-                    await applyArtwork(releases[0], to: track)
+                    await applyArtwork(releases[0], to: track, chosenByHand: false)
                 } else {
                     artworkChoices.removeAll { $0.track.id == track.id }
                     artworkChoices.append(ArtworkChoice(track: track, releases: releases))
@@ -692,27 +734,45 @@ final class AppModel {
         }
     }
 
-    /// Scarica la copertina scelta e la salva come etichetta del lato A.
-    func applyArtwork(_ release: DiscogsRelease, to track: Track) async {
+    /// Prende dall'edizione scelta la copertina **e il nome dell'album**.
+    ///
+    /// L'album è la seconda metà di ciò che si è appena scelto, e fino al 2026-09-06 andava
+    /// perduta: si apriva il foglio per dire «il disco è questo» e restava da scriverne il titolo
+    /// a mano, con Discogs che lo sapeva. `chosenByHand` distingue i due modi in cui si arriva
+    /// qui: indicare un'edizione fra dieci **è** la conferma, quindi l'album si scrive anche sopra
+    /// a quello che c'era; l'edizione unica applicata da sola non ha avuto nessuna conferma,
+    /// quindi riempie solo il campo vuoto.
+    ///
+    /// Sono le due scritture di **una** riga sola: `save` parte una volta, o la seconda
+    /// sovrascriverebbe la prima ripartendo dalla copia vecchia.
+    func applyArtwork(_ release: DiscogsRelease, to track: Track, chosenByHand: Bool) async {
         guard let paths, let token = discogsToken?.read() else { return }
+        defer { dismissArtworkChoice(for: track) }
+
+        // La riga può essere cambiata nel frattempo: si riparte da quella in tabella, non dalla
+        // copia che avevamo in mano quando è partita la ricerca.
+        var updated = trackList.first { $0.id == track.id } ?? track
+
+        if let album = release.albumTitle, chosenByHand || updated.album.isEmpty {
+            updated.album = album
+        }
+
         guard let url = release.coverURL ?? release.thumbnailURL else {
+            // Niente copertina non vuol dire niente da fare: il nome del disco è già un guadagno.
+            if updated != track { save(track: updated) }
             transientError = "Questa edizione su Discogs non ha una copertina."
             return
         }
+
         do {
             let data = try await DiscogsClient(token: token).imageData(from: url)
-            let filename = try ArtworkStore.save(
+            updated.labelImageAFilename = try ArtworkStore.save(
                 data: data, trackID: track.id, side: .a, paths: paths
             )
-            // La riga può essere cambiata nel frattempo: si riparte da quella in tabella, non
-            // dalla copia che avevamo in mano quando è partita la ricerca.
-            var updated = trackList.first { $0.id == track.id } ?? track
-            updated.labelImageAFilename = filename
-            save(track: updated)
         } catch {
             transientError = "Non ho potuto scaricare la copertina: \(Self.describe(error))"
         }
-        dismissArtworkChoice(for: track)
+        save(track: updated)
     }
 
     func dismissArtworkChoice(for track: Track) {
@@ -775,6 +835,143 @@ final class AppModel {
             save(track: updated)
         } catch {
             transientError = Self.describe(error)
+        }
+    }
+
+    /// Toglie ogni filtro, **tag compreso**: e quindi riporta anche la barra laterale sulla
+    /// libreria, o resterebbe evidenziato un tag che non filtra più niente.
+    func clearLibraryFilter() {
+        libraryFilter = LibraryFilter()
+        if case .tag = selection { selection = .library }
+    }
+
+    // MARK: - Tag
+
+    /// I tag di una traccia, nell'ordine in cui stanno nella barra laterale.
+    func tags(of track: Track) -> [Tag] {
+        let ids = tagIDsByTrack[track.id] ?? []
+        return tagList.filter { ids.contains($0.id) }
+    }
+
+    /// Quanti dischi portano questo tag. Serve al badge nella barra laterale: un tag su cui non
+    /// c'è più niente si vede e si può togliere.
+    func trackCount(for tag: Tag) -> Int {
+        tagIDsByTrack.values.count { $0.contains(tag.id) }
+    }
+
+    /// Vero se **tutte** le tracce indicate portano il tag: è ciò che decide se la voce di menu
+    /// mostra la spunta, e se premerla toglie invece di mettere.
+    func allTracks(_ ids: Set<String>, have tag: Tag) -> Bool {
+        guard !ids.isEmpty else { return false }
+        return ids.allSatisfy { tagIDsByTrack[$0]?.contains(tag.id) ?? false }
+    }
+
+    @discardableResult
+    func createTag(named name: String) -> Task<Tag?, Never>? {
+        guard let tags else { return nil }
+        return Task {
+            do {
+                return try await tags.createTag(name: name)
+            } catch {
+                transientError = Self.describe(error)
+                return nil
+            }
+        }
+    }
+
+    /// Mette o toglie il tag su tutta la selezione, in un colpo solo.
+    ///
+    /// Il verso lo decide lo stato della selezione: se ce l'hanno già tutte, si toglie. È il
+    /// comportamento di una casella a tre stati senza doverne disegnare una.
+    func toggleTag(_ tag: Tag, on trackIDs: Set<String>) {
+        guard let tags, !trackIDs.isEmpty else { return }
+        let ids = Array(trackIDs)
+        let removing = allTracks(trackIDs, have: tag)
+        Task {
+            do {
+                if removing {
+                    try await tags.removeTag(id: tag.id, fromTracks: ids)
+                } else {
+                    try await tags.addTag(id: tag.id, toTracks: ids)
+                }
+            } catch {
+                transientError = "Non ho potuto cambiare i tag: \(Self.describe(error))"
+            }
+        }
+    }
+
+    /// Crea un tag e lo mette subito sulla selezione: è il gesto che si fa dal menu contestuale,
+    /// dove il tag nuovo nasce perché serve **a quei dischi lì**.
+    func createTag(named name: String, andAssignTo trackIDs: Set<String>) {
+        guard let tags, let created = createTag(named: name) else { return }
+        let ids = Array(trackIDs)
+        guard !ids.isEmpty else { return }
+        Task {
+            guard let tag = await created.value else { return }
+            do {
+                try await tags.addTag(id: tag.id, toTracks: ids)
+            } catch {
+                transientError = "Non ho potuto assegnare il tag: \(Self.describe(error))"
+            }
+        }
+    }
+
+    /// Riscrive in blocco i tag di una traccia sola: è come lavora l'ispettore.
+    func setTags(_ tagIDs: Set<String>, for track: Track) {
+        guard let tags else { return }
+        Task {
+            do {
+                try await tags.setTags(ids: tagIDs, forTrack: track.id)
+            } catch {
+                transientError = "Non ho potuto cambiare i tag: \(Self.describe(error))"
+            }
+        }
+    }
+
+    func rename(_ tag: Tag, to name: String) {
+        guard let tags else { return }
+        var updated = tag
+        updated.name = name
+        Task {
+            do { try await tags.save(updated) }
+            catch { transientError = Self.describe(error) }
+        }
+    }
+
+    func setColorIndex(_ index: Int, for tag: Tag) {
+        guard let tags else { return }
+        var updated = tag
+        updated.colorIndex = index
+        Task {
+            do { try await tags.save(updated) }
+            catch { transientError = Self.describe(error) }
+        }
+    }
+
+    /// Cancella il tag e con lui i legami, per cascata nel database. **Senza conferma**, a
+    /// differenza dell'eliminazione di una traccia: qui non si perde nessun file, e rimetterlo
+    /// costa quanto scriverne il nome.
+    func deleteTag(_ tag: Tag) {
+        guard let tags else { return }
+        if case .tag(let id) = selection, id == tag.id { selection = .library }
+        Task {
+            do { try await tags.deleteTag(id: tag.id) }
+            catch { transientError = "Non ho potuto cancellare il tag: \(Self.describe(error))" }
+        }
+    }
+
+    /// Riordino a mano dei tag, riscrivendo `position` in modo denso su tutti: sono pochi, come
+    /// le righe di una scaletta, e così non resta nessuna deriva da rimediare.
+    func moveTags(fromOffsets source: IndexSet, toOffset destination: Int) {
+        guard let tags else { return }
+        var ordered = tagList
+        ordered.move(fromOffsets: source, toOffset: destination)
+        // Aggiornamento ottimistico: la lista si riordina sotto il dito, la scrittura segue.
+        tagList = ordered
+        let ids = ordered.map(\.id)
+        Task {
+            do { try await tags.reorderTags(idsInOrder: ids) }
+            catch { transientError = "Non ho potuto riordinare i tag: \(Self.describe(error))" }
         }
     }
 

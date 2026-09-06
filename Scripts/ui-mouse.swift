@@ -2,6 +2,7 @@
 //
 //   swiftc -O Scripts/ui-mouse.swift -o /tmp/ui-mouse
 //   /tmp/ui-mouse click 648 204
+//   /tmp/ui-mouse rightclick 648 204     apre il menu contestuale
 //   /tmp/ui-mouse drag 648 204 648 122 30
 //
 // Le coordinate sono **punti dello schermo globale**, gli stessi che restituisce
@@ -31,6 +32,16 @@ case "click":
     post(.leftMouseDown, point)
     usleep(60_000)
     post(.leftMouseUp, point)
+
+case "rightclick":
+    // Il menu contestuale: è il posto dove stanno i comandi dei tag e delle scalette, quindi
+    // senza questo non si possono provare.
+    let point = CGPoint(x: number(2), y: number(3))
+    post(.mouseMoved, point)
+    usleep(120_000)
+    post(.rightMouseDown, point, .right)
+    usleep(60_000)
+    post(.rightMouseUp, point, .right)
 
 case "doubleclick":
     let point = CGPoint(x: number(2), y: number(3))
@@ -62,6 +73,6 @@ case "drag":
     post(.leftMouseUp, to)
 
 default:
-    print("uso: mouse click|doubleclick x y  ·  mouse drag x1 y1 x2 y2 [passi]")
+    print("uso: mouse click|rightclick|doubleclick x y  ·  mouse drag x1 y1 x2 y2 [passi]")
     exit(1)
 }

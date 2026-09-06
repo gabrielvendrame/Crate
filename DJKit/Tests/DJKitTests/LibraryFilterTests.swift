@@ -77,6 +77,42 @@ struct LibraryFilterTests {
         #expect(LibraryFilter(scope: .withoutArtwork).apply(to: [withPhoto, without]).count == 1)
     }
 
+    @Test("Il tag mostra solo i dischi che lo portano")
+    func filtersByTag() {
+        let disco = track(title: "Opa")
+        let altro = track(title: "Butterfly")
+        let links = [disco.id: Set(["tag-disco"])]
+
+        var filter = LibraryFilter()
+        filter.tagID = "tag-disco"
+
+        #expect(filter.apply(to: [disco, altro], tagIDsByTrack: links).map(\.title) == ["Opa"])
+        #expect(filter.isActive)
+    }
+
+    @Test("Un tag senza dischi non ne mostra nessuno, e senza legami nemmeno")
+    func filtersByTagWithoutLinks() {
+        let one = track(title: "Opa")
+        var filter = LibraryFilter()
+        filter.tagID = "tag-vuoto"
+
+        #expect(filter.apply(to: [one], tagIDsByTrack: [one.id: ["tag-disco"]]).isEmpty)
+        #expect(filter.apply(to: [one]).isEmpty)
+    }
+
+    @Test("Tag e sottoinsieme sono ortogonali: valgono insieme")
+    func tagAndScopeCombine() {
+        let conFoto = track(title: "Opa", artworkA: "a.jpg")
+        let senzaFoto = track(title: "Butterfly")
+        let links = [conFoto.id: Set(["t"]), senzaFoto.id: Set(["t"])]
+
+        var filter = LibraryFilter(scope: .withoutArtwork)
+        filter.tagID = "t"
+
+        let result = filter.apply(to: [conFoto, senzaFoto], tagIDsByTrack: links)
+        #expect(result.map(\.title) == ["Butterfly"])
+    }
+
     @Test("Testo e sottoinsieme si applicano insieme")
     func textAndScopeCombine() {
         let wanted = track(title: "Butterfly", bpm: nil)

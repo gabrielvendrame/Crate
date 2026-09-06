@@ -81,6 +81,36 @@ enum Migrations {
             try db.create(indexOn: "playlistItem", columns: ["playlistID", "position"])
         }
 
+        // I tag, chiesti da Gabriel il 2026-09-05. Migrazione a sé e non ritocco della `v1`: il
+        // database esistente contiene ore di download e va aperto, non ricreato.
+        migrator.registerMigration("v2-tags") { db in
+            try db.create(table: "tag") { t in
+                t.primaryKey("id", .text)
+                // `NOCASE` sul nome, e l'unicità che ne segue: «Disco» e «disco» sono lo stesso
+                // tag, e averne due che si scrivono uguale li renderebbe inservibili proprio nel
+                // momento in cui servono — cercare i dischi che portano quell'etichetta.
+                t.column("name", .text).notNull().collate(.nocase)
+                t.column("colorIndex", .integer).notNull().defaults(to: 0)
+                t.column("position", .integer).notNull().defaults(to: 0)
+            }
+            try db.create(index: "tag_uniqueName", on: "tag", columns: ["name"], unique: true)
+            try db.create(indexOn: "tag", columns: ["position"])
+
+            try db.create(table: "trackTag") { t in
+                t.column("trackID", .text).notNull()
+                    .references("track", onDelete: .cascade)
+                t.column("tagID", .text).notNull()
+                    .references("tag", onDelete: .cascade)
+                // Chiave composta: la stessa accoppiata non può esistere due volte, quindi
+                // assegnare un tag già assegnato non è un errore da gestire — è un `INSERT OR
+                // IGNORE` che non fa niente.
+                t.primaryKey(["trackID", "tagID"])
+            }
+            // Le due direzioni si percorrono entrambe: i tag di un disco nell'ispettore, i dischi
+            // di un tag nel filtro della libreria. La chiave composta copre solo la prima.
+            try db.create(indexOn: "trackTag", columns: ["tagID"])
+        }
+
         return migrator
     }
 }

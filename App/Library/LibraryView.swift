@@ -6,6 +6,18 @@ struct LibraryView: View {
     /// Il modello dell'app. Riferimento diretto e non `@Environment`: vedi `AppModel.shared`.
     @MainActor private var model: AppModel { .shared }
     @State private var sortOrder = [KeyPathComparator(\Track.addedAt, order: .reverse)]
+    /// Le tracce a cui andrà il tag che si sta creando. Non `nil` = l'avviso col campo è aperto:
+    /// dentro un menu contestuale un campo di testo non ci può stare, quindi il nome si chiede
+    /// qui fuori.
+    @State private var taggingTrackIDs: Set<Track.ID>?
+    @State private var newTagName = ""
+
+    private var isCreatingTagBinding: Binding<Bool> {
+        Binding(
+            get: { taggingTrackIDs != nil },
+            set: { if !$0 { taggingTrackIDs = nil } }
+        )
+    }
 
     /// Prima si filtra, poi si ordina: l'ordinamento è una faccenda della tabella, il filtro no —
     /// lo stesso sottoinsieme serve anche al conteggio e ai comandi di menu.
@@ -19,15 +31,23 @@ struct LibraryView: View {
         Group {
             if model.trackList.isEmpty {
                 EmptyLibraryView { model.isImportSheetPresented = true }
+            } else if let name = emptyTagName {
+                ContentUnavailableView(
+                    "Nessun disco con «\(name)»",
+                    systemImage: "tag",
+                    description: Text("Trascina qui dei brani sul tag nella barra laterale, o usa «Tag» dal menu contestuale della libreria.")
+                )
             } else if sortedTracks.isEmpty {
                 NoMatchesView(filter: model.libraryFilter) {
-                    model.libraryFilter = LibraryFilter()
+                    model.clearLibraryFilter()
                 }
             } else {
                 table
             }
         }
-        .navigationTitle("Libreria")
+        // Guardando un tag il titolo è il suo nome: è la risposta alla domanda «cosa sto
+        // guardando», che con la stessa tabella e la stessa toolbar altrimenti non si vedrebbe.
+        .navigationTitle(model.selectedTag?.name ?? "Libreria")
         .navigationSubtitle(subtitle)
         .searchable(
             text: $model.libraryFilter.text,
@@ -53,6 +73,22 @@ struct LibraryView: View {
             }
             .inspectorColumnWidth(min: 260, ideal: 320, max: 420)
         }
+        .alert("Nuovo tag", isPresented: isCreatingTagBinding) {
+            TextField("Nome", text: $newTagName)
+            // Niente `disabled` sul testo appena scritto: dentro un `.alert` non si
+            // rivaluterebbe. Vedi la nota in `SidebarView`.
+            Button("Crea e assegna") {
+                guard let ids = taggingTrackIDs, Tag.normalized(name: newTagName) != nil
+                else { return }
+                model.createTag(named: newTagName, andAssignTo: ids)
+            }
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            Text(taggingTrackIDs.map { $0.count == 1
+                ? "Il tag va sul brano selezionato."
+                : "Il tag va sui \($0.count) brani selezionati."
+            } ?? "")
+        }
     }
 
     /// Quante tracce si stanno guardando, e su quante. Il secondo numero compare solo quando un
@@ -64,6 +100,13 @@ struct LibraryView: View {
             return "\(shown) di \(total) brani"
         }
         return total == 1 ? "1 brano" : "\(total) brani"
+    }
+
+    /// Un tag appena creato che non ha ancora niente sopra non è un errore da segnalare come «la
+    /// ricerca non trova nulla»: è un tag vuoto, e si riempie trascinandoci dei dischi.
+    private var emptyTagName: String? {
+        guard let tag = model.selectedTag, model.trackCount(for: tag) == 0 else { return nil }
+        return tag.name
     }
 
     private var scopePicker: some View {
@@ -158,6 +201,14 @@ struct LibraryView: View {
                         model.appendTracks(orderedTracks(in: ids), to: playlist.id)
                     }
                 }
+            }
+            Divider()
+        }
+
+        if !ids.isEmpty {
+            TagMenu(trackIDs: ids) {
+                newTagName = ""
+                taggingTrackIDs = ids
             }
             Divider()
         }

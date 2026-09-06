@@ -57,6 +57,25 @@ public struct DiscogsRelease: Identifiable, Hashable, Sendable {
         return parts.joined(separator: " · ")
     }
 
+    /// Il nome dell'album, ricavato dal titolo della release.
+    ///
+    /// Discogs scrive il titolo come «Artista - Album», quindi l'album è ciò che sta dopo il primo
+    /// trattino: separare sul **primo** e non sull'ultimo è quello che salva i titoli che il
+    /// trattino ce l'hanno dentro («Kölsch - Der Alte - Remixes»). Senza trattino il titolo è già
+    /// l'album e si prende intero, che è il caso delle compilation catalogate senza artista.
+    ///
+    /// Serve a riempire il campo Album quando si sceglie l'edizione: fin qui da quella scelta si
+    /// prendeva solo la copertina, e il nome del disco — che Discogs sa con certezza — restava da
+    /// scrivere a mano.
+    public var albumTitle: String? {
+        guard let range = title.range(of: " - ") else {
+            let whole = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return whole.isEmpty ? nil : whole
+        }
+        let album = title[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return album.isEmpty ? nil : album
+    }
+
     /// Un'edizione in vinile: è quella che interessa a chi prepara un set da suonare sui piatti.
     public var isVinyl: Bool {
         formats.contains { $0.localizedCaseInsensitiveContains("vinyl") }
