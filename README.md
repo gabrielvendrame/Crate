@@ -19,14 +19,8 @@ mixer a portata di mano!
 
 ## Cos'è
 
-Chi suona in vinile fa un giro lungo: trova un pezzo su YouTube, lo ascolta venti volte, prova a
-immaginare come lega con un altro, se ne convince e solo allora cerca il disco. Quel lavoro di
-solito si sparpaglia fra il browser, una cartella di file scaricati e un foglio di appunti.
-
-Crate lo tiene in un posto solo. Incolli un link, il brano entra in libreria con BPM, waveform e
-griglia già calcolati; gli attacchi un paio di foto dell'etichetta così lo riconosci in cassa; lo
-metti su un deck, provi il passaggio con quello sull'altro, segni dove attaccarlo e scrivi la nota
-che ti servirà davanti ai piatti.
+Crate tiene in un posto solo quello che altrimenti si sparpaglia fra il browser, una cartella di
+file scaricati e un foglio di appunti.
 
 **È un'app puramente locale**: nessun account, nessun server, nessuna sincronizzazione. I file
 stanno sul tuo disco e basta.
