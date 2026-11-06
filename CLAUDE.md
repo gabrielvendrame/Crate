@@ -250,7 +250,30 @@ xcodegen generate                                     # rigenera Crate.xcodeproj
 xcodebuild -project Crate.xcodeproj -scheme Crate build
 swift test --package-path DJKit                       # test della logica, veloci
 open Crate.xcodeproj
+./Scripts/install.sh                                  # build Release + installa in /Applications
+./Scripts/install.sh --zip                            # Crate.zip da portare su un altro Mac
 ```
+
+**L'app che si usa sta in `/Applications`, e ci arriva con `./Scripts/install.sh`.** Quella che
+Xcode lascia in `DerivedData/…/Debug` non è la stessa cosa: si porta dentro `Crate.debug.dylib` e
+`__preview.dylib` — l'infrastruttura di sviluppo — ed è compilata senza ottimizzazioni. La copia in
+`/Applications` è una **copia**: dopo una modifica non cambia da sola, va reinstallata. È la stessa
+trappola del DerivedData vista da un altro lato — l'app aperta non è quella appena compilata.
+
+**Firma ad hoc: l'app copiata su un altro Mac va sverniciata dalla quarantena.** `CODE_SIGN_IDENTITY
+= "-"` basta per eseguirla dove è stata compilata, ma un bundle che arriva da AirDrop, da un
+download o da un disco esterno porta l'attributo `com.apple.quarantine`, e Gatekeeper su una firma
+ad hoc non dice "sviluppatore non verificato": dice **«Crate è danneggiata e deve essere spostata
+nel cestino»**, che manda fuori strada. Non è danneggiata:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Crate.app
+```
+
+L'archivio va fatto con `ditto -c -k --keepParent` (è quello che fa `--zip`): una copia su chiavetta
+exFAT o uno zip fatto in altro modo perdono il bit di esecuzione dei sidecar e invalidano la firma.
+Il Mac di destinazione deve essere **Apple Silicon** — il binario è `arm64` thin e `ffmpeg` è arm64
+statico — con macOS 26.
 
 `CRATE_NETWORK_TESTS=1 swift test --package-path DJKit --filter ImportIntegration` esegue i test
 che parlano davvero con YouTube: sono esclusi dalla suite normale perché richiedono rete e
