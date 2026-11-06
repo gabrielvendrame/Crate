@@ -22,3 +22,18 @@ Resources/Tools/ffprobe
 
 # macOS
 .DS_Store
+._*
+.AppleDouble
+
+# Impostazioni locali degli strumenti: `settings.json` si versiona, il `.local` no
+.claude/settings.local.json
+
+# Archivio prodotto da ./Scripts/install.sh --zip
+Crate.zip
+
+# I dati dell'utente vivono in Application Support, non qui: questi pattern sono una rete
+# nel caso una copia finisse per sbaglio dentro la cartella del progetto
+*.peaks
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
