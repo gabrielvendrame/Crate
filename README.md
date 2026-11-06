@@ -5,10 +5,13 @@
 ![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-arm64-lightgrey)
 ![MIT](https://img.shields.io/badge/licenza-MIT-blue)
 
-**Si prepara il set al computer, si suona in vinile.** Crate è un'app macOS nativa per il lavoro
-che sta fra il trovare un pezzo su YouTube e il metterlo sul piatto: scarica l'audio da un link, lo
-analizza, lo archivia con i metadati e le foto dell'etichetta, e permette di provare le transizioni
-su due deck prima di andare a comprare il disco.
+Preparare un set cercando manualmente i dischi dalla propria collezione è sicuramente un lavoro
+stupendo, ma se iniziano ad essere centinaia ricordarsi una specifica traccia diventa lungo e
+tedioso. Ecco che nasce Crate, cercando unicamente le tracce su YouTube, basterà incollare il link
+nell'app per scaricarle, analizzarle e cercare i metadati su Discogs. Questo permette in modo
+estremamente rapido di catalogare la propria collezione e all'occorrenza di preparare un DJ set al
+volo, ovunque voi siate, analizzando gli attacchi e provando rapidamente un cambio senza avere il
+mixer a portata di mano!
 
 ![Crate: la libreria e i due deck](Docs/crate.png)
 
